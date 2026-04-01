@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
 
@@ -31,10 +32,25 @@
     <!-- content -->
     <div class="intro-content">
       <p class="intro-eyebrow">memory drift</p>
-      <button id="recordBtn" class="record-btn">
+      <button id="recordBtn" class="record-btn record-btn--locked">
         <span class="record-text">Record Your Entry</span>
       </button>
       <div class="record-glow-ring" aria-hidden="true"></div>
+
+      <!-- Auth -->
+      <div class="intro-auth" id="introAuth">
+        <div id="authLoginView" class="auth-view">
+          <input type="text" id="authUsername" class="auth-input" placeholder="choose a username" autocomplete="username" spellcheck="false">
+          <div class="auth-actions">
+            <button id="authSignInBtn" class="auth-btn">enter</button>
+          </div>
+          <p id="authMsg" class="auth-msg"></p>
+        </div>
+        <div id="authUserView" class="auth-view auth-user-view">
+          <span id="authWelcome" class="auth-welcome"></span>
+          <button id="authSignOutBtn" class="auth-signout-btn">sign out</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -50,7 +66,11 @@
       <h1>Memory Drift</h1>
     </header>
     <p id="worldHint" class="world-hint">click a memory to open it</p>
-    <button id="weeklyTabBtn" class="weekly-tab-btn">memory overlay</button>
+    <div class="nav-tabs">
+      <button id="weeklyTabBtn" class="nav-tab-btn">see your memories</button>
+      <button id="moodTabBtn" class="nav-tab-btn">mood</button>
+      <button id="mapTabBtn" class="nav-tab-btn">map</button>
+    </div>
     <button id="clearBtn" class="clear-all-btn">clear all</button>
     <button id="addBtn" class="add-btn" aria-label="Add a memory">+</button>
   </div>
@@ -62,11 +82,52 @@
       <button class="close-btn js-close-form" aria-label="Close">×</button>
 
       <div class="field-row date-row">
-        <label for="memoryDate">date of this memory</label>
-        <input type="date" id="memoryDate" class="date-input">
+        <label>date &amp; time</label>
+        <div class="date-time-wrap">
+          <input type="date" id="memoryDate" class="date-input">
+          <span class="date-time-sep">·</span>
+          <select id="memoryHour" class="time-select"></select>
+          <span class="time-colon">:</span>
+          <select id="memoryMinute" class="time-select"></select>
+          <select id="memoryAmpm" class="time-select time-select--ampm"></select>
+        </div>
       </div>
 
       <div id="questionsWrap"></div>
+
+      <div class="field-row location-row">
+        <label>where were you?</label>
+        <div class="location-wrap">
+          <button type="button" class="locate-btn" id="locateBtn">locate me</button>
+          <span class="location-sep">or</span>
+          <div class="address-autocomplete">
+            <input type="text" class="address-input" id="addressInput" placeholder="start typing an address…" autocomplete="off" spellcheck="false">
+            <div id="addressDropdown" class="addr-dropdown" hidden></div>
+          </div>
+        </div>
+        <div class="location-status" id="locationDisplay"></div>
+      </div>
+
+      <div class="field-row sound-row">
+        <label>record a sound</label>
+        <div class="sound-wrap">
+          <button type="button" class="sound-btn" id="soundRecordBtn">record</button>
+          <div class="sound-playback" id="soundPlayback" style="display:none">
+            <button type="button" class="sound-play-btn" id="soundPlayBtn" aria-label="Play">&#9654;</button>
+            <div class="sound-waveform" id="soundWaveform"><div class="sound-progress" id="soundProgress"></div></div>
+            <button type="button" class="sound-discard-btn" id="soundDiscardBtn">discard</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row images-row">
+        <label>add photos</label>
+        <div class="images-wrap">
+          <button type="button" class="images-add-btn" id="imagesAddBtn">+ add image</button>
+          <input type="file" id="imagesInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
+          <div class="images-preview" id="imagesPreview"></div>
+        </div>
+      </div>
 
       <div class="field-row">
         <label>how did today feel?</label>
@@ -104,8 +165,31 @@
     <div class="weekly-panel-card">
       <button class="close-btn js-close-weekly" aria-label="Close">×</button>
       <div class="weekly-panel-title">memory overlay</div>
-      <div class="weekly-panel-sub">a week of drawings, combined</div>
+      <div class="weekly-panel-sub">sketches by week</div>
       <div id="weeklyGrid" class="weekly-grid"></div>
+    </div>
+  </div>
+
+  <!-- ── MOOD PANEL ── -->
+  <div id="moodPanel" class="weekly-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-mood"></div>
+    <div class="weekly-panel-card">
+      <button class="close-btn js-close-mood" aria-label="Close">×</button>
+      <div class="weekly-panel-title">by mood</div>
+      <div class="weekly-panel-sub">memories grouped by feeling</div>
+      <div id="moodFilterBtns" class="mood-filter-row"></div>
+      <div id="moodMemGrid" class="week-sketch-grid"></div>
+    </div>
+  </div>
+
+  <!-- ── MAP PANEL ── -->
+  <div id="mapPanel" class="map-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-map"></div>
+    <div class="map-panel-card">
+      <button class="close-btn js-close-map" aria-label="Close">×</button>
+      <div class="map-panel-title">where you've been</div>
+      <div class="map-panel-sub">memories with location data</div>
+      <div id="mapContainer"></div>
     </div>
   </div>
 
@@ -118,6 +202,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

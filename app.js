@@ -5,6 +5,83 @@
 'use strict';
 
 // ─────────────────────────────────────────────────────────────
+// SUPABASE
+// ─────────────────────────────────────────────────────────────
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGtrMjEyNiIsImEiOiJjbWgxN3lnMnowOGFqMm1wdjhjdWt5MDg4In0.RyP5qk4n8VrWbK5cMzoZcA';
+
+const SUPABASE_URL = 'https://rbqwoiewrgcfbvotnaoj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJicXdvaWV3cmdjZmJ2b3RuYW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5ODcyNTMsImV4cCI6MjA5MDU2MzI1M30.GdYT18ejTA7GhpjAi34Gtnuu5lYrlyivhaJsluPieh0';
+
+const sb = {
+  _h: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+
+  async getUser(username) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${encodeURIComponent(username)}&select=username`, { headers: this._h });
+      if (!r.ok) return null;
+      const rows = await r.json();
+      return rows[0] || null;
+    } catch { return null; }
+  },
+
+  async createUser(username) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+        method: 'POST',
+        headers: { ...this._h, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ username }),
+      });
+      return r.ok;
+    } catch { return false; }
+  },
+
+  async loadMemories(username) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?username=eq.${encodeURIComponent(username)}&order=ts.asc`, { headers: this._h });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  },
+
+  async loadWeeklies(username) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/weeklies?username=eq.${encodeURIComponent(username)}&order=created_at.asc`, { headers: this._h });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  },
+
+  async saveMemory(mem) {
+    try {
+      const row = { id: mem.id, date: mem.date, time: mem.time || null, entry: mem.entry, qa: mem.qa, mood: mem.mood, sketch: mem.sketch, ts: mem.ts, username: mem.username, location: mem.location || null, audio: mem.audio || null, images: mem.images || null };
+      await fetch(`${SUPABASE_URL}/rest/v1/memories`, {
+        method: 'POST',
+        headers: { ...this._h, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(row),
+      });
+    } catch (e) { console.warn('Supabase save failed', e); }
+  },
+
+  async saveWeekly(w) {
+    try {
+      const row = { id: w.id, week_key: w.weekKey, week_label: w.weekLabel, date: w.date, mood: w.mood, sketch: w.sketch, is_weekly: true, count: w.count, username: w.username };
+      await fetch(`${SUPABASE_URL}/rest/v1/weeklies`, {
+        method: 'POST',
+        headers: { ...this._h, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(row),
+      });
+    } catch (e) { console.warn('Supabase weekly save failed', e); }
+  },
+
+  async deleteAll(username) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/memories?username=eq.${encodeURIComponent(username)}`, { method: 'DELETE', headers: this._h });
+      await fetch(`${SUPABASE_URL}/rest/v1/weeklies?username=eq.${encodeURIComponent(username)}`, { method: 'DELETE', headers: this._h });
+    } catch (e) { console.warn('Supabase delete failed', e); }
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────
 const QUESTIONS = [
@@ -65,6 +142,16 @@ function weekLabel(weekKey) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function weekDateRange(weekKey) {
+  const [yr, wn] = weekKey.split('-W');
+  const d = new Date(+yr, 0, 1 + (+wn - 1) * 7);
+  const dow = d.getDay();
+  d.setDate(d.getDate() + (dow <= 4 ? 1 - dow : 8 - dow));
+  const sun = new Date(d); sun.setDate(d.getDate() + 6);
+  const fmt = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${fmt(d)} – ${fmt(sun)}`;
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T12:00:00')
@@ -97,13 +184,14 @@ function escHtml(s) {
   return d.innerHTML;
 }
 
+
 // ─────────────────────────────────────────────────────────────
-// STORAGE
+// SUPABASE
 // ─────────────────────────────────────────────────────────────
-const store = {
-  get: (k, d = null) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set: (k, v)        => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { console.warn('Storage full', e); } },
-};
+const db = supabase.createClient(
+  'https://rbqwoiewrgcfbvotnaoj.supabase.co',
+  'sb_publishable_LvJihLKo6TuFlsEt9VyekQ_QnFWHHSi'
+);
 
 // ─────────────────────────────────────────────────────────────
 // WEEKLY COMPOSITE GENERATOR
@@ -195,8 +283,9 @@ class MemObj {
     this.weekly  = !!mem.isWeekly;
     this.W = W; this.H = H;
 
-    this.bw = this.weekly ? rand(220, 280) : rand(110, 155);
-    this.bh = this.bw * 0.72;
+    this.baseBw  = this.weekly ? rand(220, 280) : rand(110, 155);
+    this.bw      = this.baseBw;
+    this.bh      = this.bw * 0.72;
 
     this.x  = rand(this.bw, W - this.bw);
     this.y  = rand(this.bh, H - this.bh);
@@ -213,10 +302,12 @@ class MemObj {
     this.oscSpd = rand(0.007, 0.013);
     this.oscAmp = rand(6, 16);
 
-    this.opacity  = 0;
-    this.tOpacity = this.weekly ? 0.92 : rand(0.72, 0.88);
-    this.scale    = 1;
-    this.hovered  = false;
+    this.opacity   = 0;
+    this.tOpacity  = this.weekly ? 0.92 : 0.55; // overridden by setAgeScore
+    this.ageScore  = 0.5;
+    this.clickCount = 0;
+    this.scale     = 1;
+    this.hovered   = false;
 
     // Breathing pulse to feel alive
     this.pulsePh  = rand(0, Math.PI * 2);
@@ -226,6 +317,29 @@ class MemObj {
     if (mem.sketch) { this.img = new Image(); this.img.onload = () => { this.loaded = true; }; this.img.src = mem.sketch; }
 
     this.glowCol = (mem.mood ? mem.mood.c[0] : '#8b7db5');
+  }
+
+  // Called by World whenever age range changes
+  setAgeScore(score) {
+    this.ageScore = score;
+    if (this.weekly) return;
+    const factor = lerp(0.5, 1.5, score);
+    const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
+    this.bw = this.baseBw * boosted;
+    this.bh = this.bw * 0.72;
+    this.tOpacity = lerp(0.22, 0.85, score + this.clickCount * 0.08);
+    this.tOpacity = clamp(this.tOpacity, 0.22, 0.92);
+  }
+
+  // Called on each click — grow size and opacity
+  bump() {
+    if (this.weekly) return;
+    this.clickCount++;
+    const factor  = lerp(0.5, 1.5, this.ageScore);
+    const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
+    this.bw = this.baseBw * boosted;
+    this.bh = this.bw * 0.72;
+    this.tOpacity = clamp(this.tOpacity + 0.08, 0.22, 0.92);
   }
 
   contains(px, py, pad = 0) {
@@ -364,10 +478,29 @@ class World {
 
   add(mem) {
     this.objects.push(new MemObj(mem, this.W, this.H));
+    this._recomputeAgeScores();
   }
 
   remove(id) {
     this.objects = this.objects.filter(o => o.mem.id !== id);
+    this._recomputeAgeScores();
+  }
+
+  bump(id) {
+    const obj = this.objects.find(o => o.mem.id === id);
+    if (obj) obj.bump();
+  }
+
+  _recomputeAgeScores() {
+    const regular = this.objects.filter(o => !o.weekly && o.mem.ts);
+    if (!regular.length) return;
+    const timestamps = regular.map(o => o.mem.ts);
+    const minTs = Math.min(...timestamps);
+    const maxTs = Math.max(...timestamps);
+    const range = maxTs - minTs || 1;
+    regular.forEach(o => {
+      o.setAgeScore((o.mem.ts - minTs) / range);
+    });
   }
 
   hitTest(x, y, pad = 0) {
@@ -567,11 +700,19 @@ class DrawCanvas {
 // ─────────────────────────────────────────────────────────────
 class App {
   constructor() {
-    this.memories  = store.get('md_memories', []).map(normalizeMemory);
-    this.weeklies  = store.get('md_weeklies', []);
-    this.mood      = null;
-    this.questions = [];
-    this.dc        = null;   // DrawCanvas instance
+    this.memories    = [];
+    this.weeklies    = [];
+    this.mood           = null;
+    this.location       = null;
+    this.audio          = null;  // base64 data URL
+    this.images         = [];    // array of base64 data URLs
+    this.questions      = [];
+    this.dc             = null;
+    this._leafletMap    = null;
+    this._mediaRecorder  = null;
+    this._audioChunks    = [];
+    this._pendingGeocode = null;
+    this.currentUser = localStorage.getItem('md_user') || null;
 
     this.cvEl  = document.getElementById('worldCanvas');
     this.world = new World(this.cvEl);
@@ -579,13 +720,29 @@ class App {
     this._resize();
     window.addEventListener('resize', () => this._resize());
 
-    this._populateWorld();
     this._bindUI();
+    this._bindAuth();
     this._loop();
     this._initCaustics();
 
-    // Always start at stage 1 (intro screen)
-    // World UI stays hidden until _enterWorld() is called
+    if (this.currentUser) {
+      this._showUserView(this.currentUser);
+      this._init(this.currentUser);
+    }
+  }
+
+  async _init(username) {
+    const [mems, wks] = await Promise.all([sb.loadMemories(username), sb.loadWeeklies(username)]);
+
+    this.memories = (mems || []).map(normalizeMemory);
+    this.weeklies = (wks || []).map(w => ({
+      ...w,
+      weekKey:   w.week_key,
+      weekLabel: w.week_label,
+      isWeekly:  true,
+    }));
+
+    this._populateWorld();
   }
 
   /* ── World setup ──────────────────────────────── */
@@ -657,9 +814,10 @@ class App {
     document.getElementById('addBtn').addEventListener('click', () => this._openForm(false));
 
     // Clear all
-    document.getElementById('clearBtn').addEventListener('click', () => {
+    document.getElementById('clearBtn').addEventListener('click', async () => {
+      if (!this.currentUser) return;
       if (!confirm('Clear all memories?')) return;
-      store.set('md_memories', []); store.set('md_weeklies', []);
+      await sb.deleteAll(this.currentUser);
       location.reload();
     });
 
@@ -674,6 +832,16 @@ class App {
     document.getElementById('weeklyTabBtn').addEventListener('click', () => this._openWeeklyPanel());
     document.querySelectorAll('.js-close-weekly').forEach(el =>
       el.addEventListener('click', () => this._closeWeeklyPanel()));
+
+    // Mood panel
+    document.getElementById('moodTabBtn').addEventListener('click', () => this._openMoodPanel());
+    document.querySelectorAll('.js-close-mood').forEach(el =>
+      el.addEventListener('click', () => this._closeMoodPanel()));
+
+    // Map panel
+    document.getElementById('mapTabBtn').addEventListener('click', () => this._openMapPanel());
+    document.querySelectorAll('.js-close-map').forEach(el =>
+      el.addEventListener('click', () => this._closeMapPanel()));
 
     // Close popup
     document.querySelectorAll('.js-close-popup').forEach(el =>
@@ -729,8 +897,55 @@ class App {
     });
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { this._closeForm(); this._closePopup(); this._closeWeeklyPanel(); }
+      if (e.key === 'Escape') { this._closeForm(); this._closePopup(); this._closeWeeklyPanel(); this._closeMoodPanel(); }
     });
+  }
+
+  /* ── Auth ────────────────────────────────────── */
+
+  _bindAuth() {
+    document.getElementById('authSignInBtn').addEventListener('click',  () => this._authSubmit());
+    document.getElementById('authSignOutBtn').addEventListener('click', () => this._signOut());
+    document.getElementById('authUsername').addEventListener('keydown', e => {
+      if (e.key === 'Enter') this._authSubmit();
+    });
+  }
+
+  async _authSubmit() {
+    const username = document.getElementById('authUsername').value.trim().toLowerCase();
+    if (!username)        { this._authMsg('enter a username'); return; }
+    if (username.length < 2) { this._authMsg('username too short'); return; }
+    if (!/^[a-z0-9_-]+$/.test(username)) { this._authMsg('letters, numbers, _ and - only'); return; }
+
+    const existing = await sb.getUser(username);
+    if (!existing) {
+      const ok = await sb.createUser(username);
+      if (!ok) { this._authMsg('could not create account'); return; }
+    }
+
+    localStorage.setItem('md_user', username);
+    this.currentUser = username;
+    this._showUserView(username);
+    this._authMsg('');
+    await this._init(username);
+  }
+
+  _authMsg(text, isError = true) {
+    const el = document.getElementById('authMsg');
+    el.textContent = text;
+    el.className = 'auth-msg' + (isError ? '' : ' ok');
+  }
+
+  _showUserView(username) {
+    document.getElementById('authLoginView').style.display = 'none';
+    document.getElementById('authUserView').style.display  = 'flex';
+    document.getElementById('authWelcome').textContent = `welcome back, ${username}`;
+    document.getElementById('recordBtn').classList.remove('record-btn--locked');
+  }
+
+  _signOut() {
+    localStorage.removeItem('md_user');
+    location.reload();
   }
 
   /* ── Form ─────────────────────────────────────── */
@@ -754,6 +969,7 @@ class App {
 
     e.preventDefault();
     e.stopPropagation();
+    this.world.bump(obj.mem.id);
     this._openPopup(obj.mem);
   }
 
@@ -779,9 +995,62 @@ class App {
 
   _openForm(initial = false) {
     this._initialEntry = initial;
-    // Auto-set date to today (hidden, not shown)
     const today = new Date();
     document.getElementById('memoryDate').value = today.toISOString().slice(0, 10);
+
+    // Populate time selects (once — if already populated, just reset values)
+    const hourSel   = document.getElementById('memoryHour');
+    const minSel    = document.getElementById('memoryMinute');
+    const ampmSel   = document.getElementById('memoryAmpm');
+
+    if (!hourSel.options.length) {
+      for (let h = 1; h <= 12; h++) {
+        const o = document.createElement('option'); o.value = h; o.textContent = h;
+        hourSel.appendChild(o);
+      }
+      for (let m = 0; m < 60; m++) {
+        const o = document.createElement('option');
+        o.value = String(m).padStart(2, '0');
+        o.textContent = String(m).padStart(2, '0');
+        minSel.appendChild(o);
+      }
+      ['AM', 'PM'].forEach(p => {
+        const o = document.createElement('option'); o.value = p; o.textContent = p;
+        ampmSel.appendChild(o);
+      });
+    }
+
+    // Set to current time
+    let h = today.getHours(), m = today.getMinutes();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    hourSel.value = h;
+    minSel.value  = String(m).padStart(2, '0');
+    ampmSel.value = ampm;
+
+    // Reset location
+    this.location = null;
+    const locDisplay = document.getElementById('locationDisplay');
+    if (locDisplay) locDisplay.textContent = '';
+    const locBtn = document.getElementById('locateBtn');
+    if (locBtn) { locBtn.textContent = 'locate me'; locBtn.disabled = false; }
+    this._pendingGeocode = null;
+    const addrInput = document.getElementById('addressInput');
+    if (addrInput) addrInput.value = '';
+
+    // Reset audio
+    this._stopRecording();
+    this.audio = null;
+    this._audioChunks = [];
+    document.getElementById('soundRecordBtn').textContent = 'record';
+    document.getElementById('soundRecordBtn').classList.remove('recording');
+    document.getElementById('soundPlayback').style.display = 'none';
+    document.getElementById('soundProgress').style.width = '0%';
+
+    // Reset images
+    this.images = [];
+    document.getElementById('imagesPreview').innerHTML = '';
+    document.getElementById('imagesInput').value = '';
 
     // Single cycling question
     this._qIdx = 0;
@@ -813,6 +1082,10 @@ class App {
           this.dc.color = m.c[0];
           document.getElementById('colorPicker').value = m.c[0];
         }
+        // Unlock sketch + submit once mood is chosen
+        document.getElementById('drawingCanvas').classList.remove('sketch-locked');
+        document.querySelector('.drawing-wrap').classList.remove('sketch-locked-wrap');
+        document.getElementById('submitBtn').disabled = false;
       });
       grid.appendChild(btn);
     });
@@ -829,10 +1102,269 @@ class App {
     if (this.dc) this.dc.color = '#b48ef5';
     document.getElementById('brushSize').value = '10';
 
+    // Lock sketch and submit until mood selected
+    dcEl.classList.add('sketch-locked');
+    document.querySelector('.drawing-wrap').classList.add('sketch-locked-wrap');
+    document.getElementById('submitBtn').disabled = true;
+
+    // Bind locate button
+    document.getElementById('locateBtn').onclick = () => this._geolocate();
+
+    // Address autocomplete
+    this._initAddressAutocomplete();
+
+    // Bind sound button
+    document.getElementById('soundRecordBtn').onclick    = () => this._toggleRecording();
+    document.getElementById('soundPlayBtn').onclick      = () => this._playAudio();
+    document.getElementById('soundDiscardBtn').onclick   = () => this._discardAudio();
+
+    // Bind images
+    document.getElementById('imagesAddBtn').onclick      = () => document.getElementById('imagesInput').click();
+    document.getElementById('imagesInput').onchange      = e  => this._addImages(e);
+
     const modal = document.getElementById('formModal');
     modal.classList.add('open');
     if (initial) modal.classList.add('initial');
     modal.setAttribute('aria-hidden', 'false');
+  }
+
+  async _geolocate() {
+    const btn = document.getElementById('locateBtn');
+    const display = document.getElementById('locationDisplay');
+    if (!navigator.geolocation) {
+      display.textContent = 'not supported';
+      return;
+    }
+    btn.textContent = '…';
+    btn.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        display.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        this.location = { lat, lng, name: null };
+        btn.textContent = 'relocate';
+        btn.disabled = false;
+
+        // Reverse geocode via Nominatim
+        try {
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { 'Accept': 'application/json' } }
+          );
+          if (r.ok) {
+            const data = await r.json();
+            const addr = data.address || {};
+            const name = addr.city || addr.town || addr.village || addr.county || addr.state || data.display_name || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+            this.location.name = name;
+            display.textContent = name;
+          }
+        } catch { /* keep raw coords */ }
+      },
+      err => {
+        const msgs = { 1: 'permission denied', 2: 'unavailable', 3: 'timed out' };
+        display.textContent = msgs[err.code] || 'error';
+        btn.textContent = 'try again';
+        btn.disabled = false;
+      },
+      { timeout: 10000 }
+    );
+  }
+
+  _initAddressAutocomplete() {
+    const input    = document.getElementById('addressInput');
+    const dropdown = document.getElementById('addressDropdown');
+    const display  = document.getElementById('locationDisplay');
+
+    let timer       = null;
+    let activeIdx   = -1;
+    let suggestions = [];
+
+    const close = () => {
+      dropdown.innerHTML = '';
+      dropdown.hidden = true;
+      activeIdx = -1;
+    };
+
+    const setActive = idx => {
+      activeIdx = idx;
+      dropdown.querySelectorAll('.addr-option').forEach((el, i) => {
+        el.classList.toggle('active', i === activeIdx);
+        if (i === activeIdx) el.scrollIntoView({ block: 'nearest' });
+      });
+    };
+
+    const commit = item => {
+      this.location = { lat: item.lat, lng: item.lng, name: item.label };
+      input.value = item.label;
+      display.textContent = item.label;
+      close();
+    };
+
+    const render = items => {
+      suggestions = items;
+      activeIdx   = -1;
+      dropdown.innerHTML = '';
+      if (!items.length) { close(); return; }
+
+      items.forEach((item, i) => {
+        const el = document.createElement('div');
+        el.className = 'addr-option';
+        el.innerHTML = `<span class="addr-main">${escHtml(item.main)}</span>`
+                     + (item.sub ? `<span class="addr-sub">${escHtml(item.sub)}</span>` : '');
+        el.addEventListener('mousedown', e => { e.preventDefault(); commit(item); });
+        el.addEventListener('mouseover', () => setActive(i));
+        dropdown.appendChild(el);
+      });
+      dropdown.hidden = false;
+    };
+
+    const search = async query => {
+      if (query.length < 2) { close(); return; }
+      try {
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
+          + `?types=address&autocomplete=true&limit=6&language=en`
+          + `&proximity=-73.9857,40.7484`
+          + `&access_token=${MAPBOX_TOKEN}`;
+        const r = await fetch(url);
+        if (!r.ok) return;
+        const data = await r.json();
+        const items = (data.features || []).map(f => {
+          const [lng, lat] = f.center;
+          // place_name = "123 Main St, City, State, Country"
+          // text       = "123 Main St"  (street portion only)
+          const label = f.place_name || f.text;
+          const main  = f.text || label;
+          const sub   = label.replace(main, '').replace(/^,\s*/, '');
+          return { lat, lng, label, main, sub };
+        });
+        render(items);
+      } catch { /* network error — fail silently */ }
+    };
+
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (!q) { close(); display.textContent = ''; this.location = null; return; }
+      timer = setTimeout(() => search(q), 260);
+    });
+
+    input.addEventListener('keydown', e => {
+      const opts = dropdown.querySelectorAll('.addr-option');
+      if (!opts.length && e.key !== 'Escape') return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActive(Math.min(activeIdx + 1, opts.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActive(Math.max(activeIdx - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (activeIdx >= 0 && suggestions[activeIdx]) commit(suggestions[activeIdx]);
+      } else if (e.key === 'Escape') {
+        close();
+      }
+    });
+
+    // Close on outside click, not on clicking an option (mousedown prevents blur)
+    input.addEventListener('blur', () => setTimeout(close, 160));
+  }
+
+  async _toggleRecording() {
+    if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
+      this._stopRecording();
+    } else {
+      await this._startRecording();
+    }
+  }
+
+  async _startRecording() {
+    const btn = document.getElementById('soundRecordBtn');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this._audioChunks = [];
+      this._mediaRecorder = new MediaRecorder(stream);
+      this._mediaRecorder.ondataavailable = e => { if (e.data.size > 0) this._audioChunks.push(e.data); };
+      this._mediaRecorder.onstop = () => {
+        const blob = new Blob(this._audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          this.audio = reader.result;
+          document.getElementById('soundPlayback').style.display = 'flex';
+        };
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      this._mediaRecorder.start();
+      btn.textContent = 'stop';
+      btn.classList.add('recording');
+      // Pulse timer label
+      this._recStart = Date.now();
+      this._recTimer = setInterval(() => {
+        const s = Math.floor((Date.now() - this._recStart) / 1000);
+        btn.textContent = `stop ${s}s`;
+      }, 1000);
+    } catch {
+      document.getElementById('locationDisplay');
+      btn.textContent = 'mic denied';
+    }
+  }
+
+  _stopRecording() {
+    clearInterval(this._recTimer);
+    if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
+      this._mediaRecorder.stop();
+    }
+    this._mediaRecorder = null;
+  }
+
+  _playAudio() {
+    if (!this.audio) return;
+    if (this._audioEl) { this._audioEl.pause(); this._audioEl = null; }
+    const el = new Audio(this.audio);
+    this._audioEl = el;
+    const prog = document.getElementById('soundProgress');
+    prog.style.width = '0%';
+    el.ontimeupdate = () => {
+      if (el.duration) prog.style.width = `${(el.currentTime / el.duration) * 100}%`;
+    };
+    el.onended = () => { prog.style.width = '100%'; };
+    el.play();
+  }
+
+  _discardAudio() {
+    if (this._audioEl) { this._audioEl.pause(); this._audioEl = null; }
+    this.audio = null;
+    this._audioChunks = [];
+    document.getElementById('soundPlayback').style.display = 'none';
+    document.getElementById('soundRecordBtn').textContent = 'record';
+    document.getElementById('soundRecordBtn').classList.remove('recording');
+    document.getElementById('soundProgress').style.width = '0%';
+  }
+
+  _addImages(e) {
+    const files = Array.from(e.target.files);
+    const preview = document.getElementById('imagesPreview');
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const dataURL = ev.target.result;
+        this.images.push(dataURL);
+        const wrap = document.createElement('div');
+        wrap.className = 'img-thumb-wrap';
+        const idx = this.images.length - 1;
+        wrap.innerHTML = `<img src="${dataURL}" class="img-thumb" alt="photo">
+          <button type="button" class="img-remove-btn" aria-label="Remove">×</button>`;
+        wrap.querySelector('.img-remove-btn').onclick = () => {
+          this.images.splice(idx, 1);
+          wrap.remove();
+        };
+        preview.appendChild(wrap);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
   }
 
   _cycleQuestion() {
@@ -848,6 +1380,8 @@ class App {
 
   _closeForm() {
     clearInterval(this._qInterval);
+    this._stopRecording();
+    if (this._audioEl) { this._audioEl.pause(); this._audioEl = null; }
     const modal = document.getElementById('formModal');
     modal.classList.remove('open', 'initial');
     modal.setAttribute('aria-hidden', 'true');
@@ -857,24 +1391,34 @@ class App {
     const date = document.getElementById('memoryDate').value;
     if (!date) return;
 
+    const h    = document.getElementById('memoryHour').value;
+    const m    = document.getElementById('memoryMinute').value;
+    const ampm = document.getElementById('memoryAmpm').value;
+    const time = `${h}:${m} ${ampm}`;
+
     const entry = document.getElementById('qAnswer')?.value?.trim() || '';
     const qa = [{ q: QUESTIONS[this._qIdx], a: entry }];
 
     const memory = {
-      id:   `mem_${Date.now()}`,
+      id:       `mem_${Date.now()}`,
       date,
+      time,
       entry,
       qa,
-      mood:   this.mood,
-      sketch: this.dc ? this.dc.dataURL() : null,
-      ts:     Date.now(),
+      mood:     this.mood,
+      sketch:   this.dc ? this.dc.dataURL() : null,
+      ts:       Date.now(),
+      username: this.currentUser,
+      location: this.location || null,
+      audio:    this.audio   || null,
+      images:   this.images.length ? this.images : null,
     };
 
     const wasInitial = this._initialEntry;
     this._initialEntry = false;
 
     this.memories.push(memory);
-    store.set('md_memories', this.memories);
+    await sb.saveMemory(memory);
     this.world.add(memory);
 
     this._closeForm();
@@ -913,6 +1457,7 @@ class App {
       sketch:    compositeData,
       isWeekly:  true,
       count:     weekMems.length,
+      username:  this.currentUser,
     };
 
     const existIdx = this.weeklies.findIndex(w => w.weekKey === key);
@@ -922,35 +1467,65 @@ class App {
     } else {
       this.weeklies.push(composite);
     }
-    store.set('md_weeklies', this.weeklies);
+    await sb.saveWeekly(composite);
     this.world.add({ ...composite, isWeekly: true });
   }
 
   /* ── Weekly panel ─────────────────────────────── */
 
   _openWeeklyPanel() {
-    const grid = document.getElementById('weeklyGrid');
-    grid.innerHTML = '';
+    const container = document.getElementById('weeklyGrid');
+    container.innerHTML = '';
 
-    if (this.weeklies.length === 0) {
-      grid.innerHTML = `<div class="weekly-empty">
-        sketch for 7 days in a row<br>to generate your first memory overlay
-      </div>`;
+    // Group memories by ISO week, newest week first
+    const byWeek = new Map();
+    this.memories.forEach(m => {
+      const key = isoWeekKey(m.date);
+      if (!byWeek.has(key)) byWeek.set(key, []);
+      byWeek.get(key).push(m);
+    });
+
+    if (byWeek.size === 0) {
+      container.innerHTML = `<div class="weekly-empty">your sketches will appear here, grouped by week</div>`;
     } else {
-      this.weeklies.forEach(w => {
-        const item = document.createElement('div');
-        item.className = 'weekly-item';
-        item.innerHTML = `
-          <img src="${w.sketch}" alt="weekly overlay">
-          <div class="weekly-item-meta">
-            <div class="weekly-item-label">${w.weekLabel}</div>
-            <div class="weekly-item-count">${w.count} memories layered</div>
-          </div>`;
-        item.addEventListener('click', () => {
-          this._closeWeeklyPanel();
-          this._openPopup(w);
+      const sortedWeeks = [...byWeek.keys()].sort().reverse();
+      sortedWeeks.forEach(key => {
+        const mems = byWeek.get(key).sort((a, b) => a.ts - b.ts);
+        const range = weekDateRange(key);
+
+        const section = document.createElement('div');
+        section.className = 'week-section';
+
+        const label = document.createElement('div');
+        label.className = 'week-section-label';
+        label.textContent = range;
+        section.appendChild(label);
+
+        const grid = document.createElement('div');
+        grid.className = 'week-sketch-grid';
+
+        mems.forEach(mem => {
+          const thumb = document.createElement('div');
+          thumb.className = 'week-thumb';
+          if (mem.sketch) {
+            thumb.innerHTML = `<img src="${mem.sketch}" alt="${formatDate(mem.date)}">`;
+          } else {
+            thumb.classList.add('week-thumb--nosketc');
+            thumb.style.background = mem.mood ? `linear-gradient(135deg,${mem.mood.c[0]}22,${mem.mood.c[1]}22)` : '';
+          }
+          const dateLbl = document.createElement('div');
+          dateLbl.className = 'week-thumb-date';
+          dateLbl.textContent = formatDate(mem.date);
+          thumb.appendChild(dateLbl);
+          thumb.addEventListener('click', () => {
+            this._closeWeeklyPanel();
+            this._openPopup(mem);
+          });
+          grid.appendChild(thumb);
         });
-        grid.appendChild(item);
+
+        section.appendChild(grid);
+        container.appendChild(section);
       });
     }
 
@@ -965,13 +1540,161 @@ class App {
     panel.setAttribute('aria-hidden', 'true');
   }
 
+  /* ── Mood panel ───────────────────────────────── */
+
+  _openMoodPanel(activeMoodName = null) {
+    const panel = document.getElementById('moodPanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+
+    const btnsWrap = document.getElementById('moodFilterBtns');
+    const gridEl   = document.getElementById('moodMemGrid');
+
+    // Build filter buttons once per open
+    btnsWrap.innerHTML = '';
+    const selected = activeMoodName || MOODS[0].name;
+
+    MOODS.forEach(m => {
+      const btn = document.createElement('button');
+      btn.className = 'mood-filter-btn' + (m.name === selected ? ' active' : '');
+      btn.textContent = m.name;
+      btn.style.setProperty('--mc', m.c[0]);
+      btn.addEventListener('click', () => {
+        btnsWrap.querySelectorAll('.mood-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderMoodGrid(m.name);
+      });
+      btnsWrap.appendChild(btn);
+    });
+
+    const renderMoodGrid = moodName => {
+      gridEl.innerHTML = '';
+      const matches = this.memories.filter(m => m.mood && m.mood.name === moodName)
+        .sort((a, b) => b.ts - a.ts);
+
+      if (!matches.length) {
+        gridEl.innerHTML = `<div class="weekly-empty">no ${moodName.toLowerCase()} memories yet</div>`;
+        return;
+      }
+
+      matches.forEach(mem => {
+        const thumb = document.createElement('div');
+        thumb.className = 'week-thumb';
+        if (mem.sketch) {
+          thumb.innerHTML = `<img src="${mem.sketch}" alt="${formatDate(mem.date)}">`;
+        } else {
+          thumb.style.background = `linear-gradient(135deg,${mem.mood.c[0]}22,${mem.mood.c[1]}22)`;
+        }
+        const dateLbl = document.createElement('div');
+        dateLbl.className = 'week-thumb-date';
+        dateLbl.textContent = formatDate(mem.date);
+        thumb.appendChild(dateLbl);
+        thumb.addEventListener('click', () => {
+          this._closeMoodPanel();
+          this._openPopup(mem);
+        });
+        gridEl.appendChild(thumb);
+      });
+    };
+
+    renderMoodGrid(selected);
+  }
+
+  _closeMoodPanel() {
+    const panel = document.getElementById('moodPanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
+  /* ── Map panel ────────────────────────────────── */
+
+  _openMapPanel() {
+    const panel = document.getElementById('mapPanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+
+    // Give the panel a tick to become visible before Leaflet initializes
+    requestAnimationFrame(() => {
+      const container = document.getElementById('mapContainer');
+      const located = this.memories.filter(m => m.location && m.location.lat != null);
+
+      if (!this._leafletMap) {
+        const defaultCenter = located.length
+          ? [located[0].location.lat, located[0].location.lng]
+          : [20, 0];
+        this._leafletMap = L.map(container, { zoomControl: true }).setView(defaultCenter, located.length ? 5 : 2);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          maxZoom: 19,
+        }).addTo(this._leafletMap);
+
+        this._mapMarkers = L.layerGroup().addTo(this._leafletMap);
+      }
+
+      // Rebuild markers each open so new memories appear
+      this._mapMarkers.clearLayers();
+
+      if (located.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'map-empty';
+        empty.textContent = 'no memories with location yet — use "locate me" when recording';
+        container.appendChild(empty);
+        return;
+      }
+
+      const bounds = [];
+      located.forEach(mem => {
+        const { lat, lng, name } = mem.location;
+        const locLabel = name || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+        const dateLabel = formatDate(mem.date);
+
+        const icon = L.divIcon({
+          className: 'map-marker',
+          html: `<div class="map-marker-dot" style="background:${mem.mood ? mem.mood.c[0] : '#b48ef5'}"></div>`,
+          iconSize: [12, 12],
+          iconAnchor: [6, 6],
+        });
+
+        const marker = L.marker([lat, lng], { icon });
+        marker.bindPopup(`
+          <div class="map-popup">
+            <div class="map-popup-date">${dateLabel}</div>
+            <div class="map-popup-loc">${escHtml(locLabel)}</div>
+            ${mem.entry ? `<div class="map-popup-entry">${escHtml(mem.entry.slice(0, 80))}${mem.entry.length > 80 ? '…' : ''}</div>` : ''}
+          </div>`, { className: 'map-leaflet-popup' });
+        marker.on('click', () => {
+          this._closeMapPanel();
+          setTimeout(() => this._openPopup(mem), 320);
+        });
+        this._mapMarkers.addLayer(marker);
+        bounds.push([lat, lng]);
+      });
+
+      if (bounds.length === 1) {
+        this._leafletMap.setView(bounds[0], 10);
+      } else if (bounds.length > 1) {
+        this._leafletMap.fitBounds(bounds, { padding: [40, 40] });
+      }
+
+      setTimeout(() => this._leafletMap.invalidateSize(), 80);
+    });
+  }
+
+  _closeMapPanel() {
+    const panel = document.getElementById('mapPanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
   /* ── Popup ────────────────────────────────────── */
 
   _openPopup(mem) {
     const body = document.getElementById('popupBody');
 
     const dateLong = formatDateLong(mem.date);
-    let html = `<div class="pop-date">${dateLong}</div>`;
+    const timeStr  = mem.time ? `<span class="pop-time">${mem.time}</span>` : '';
+    let html = `<div class="pop-date">${dateLong}${timeStr}</div>`;
 
     if (mem.isWeekly) {
       html += `<div class="pop-weekly-badge">✦ weekly echo &nbsp;·&nbsp; ${mem.count || ''} memories</div>`;
@@ -979,6 +1702,14 @@ class App {
 
     if (mem.sketch) {
       html += `<img class="pop-sketch" src="${mem.sketch}" alt="sketch">`;
+    }
+
+    if (mem.images && mem.images.length) {
+      html += `<div class="pop-images">`;
+      mem.images.forEach((src, i) => {
+        html += `<img class="pop-photo" src="${src}" alt="photo ${i + 1}">`;
+      });
+      html += `</div>`;
     }
 
     if (mem.isWeekly) {
@@ -994,6 +1725,57 @@ class App {
     }
 
     body.innerHTML = html;
+
+    // Footer: audio player + download
+    if (mem.audio || mem.sketch) {
+      const foot = document.createElement('div');
+      foot.className = 'popup-foot';
+
+      if (mem.audio) {
+        const audioWrap = document.createElement('div');
+        audioWrap.className = 'pop-audio-wrap';
+        const playBtn = document.createElement('button');
+        playBtn.className = 'pop-audio-btn';
+        playBtn.innerHTML = '&#9654;';
+        playBtn.setAttribute('aria-label', 'Play recording');
+        const bar = document.createElement('div');
+        bar.className = 'pop-audio-bar';
+        const prog = document.createElement('div');
+        prog.className = 'pop-audio-progress';
+        bar.appendChild(prog);
+        audioWrap.appendChild(playBtn);
+        audioWrap.appendChild(bar);
+        foot.appendChild(audioWrap);
+
+        let audioEl = null;
+        playBtn.addEventListener('click', () => {
+          if (audioEl && !audioEl.paused) {
+            audioEl.pause();
+            playBtn.innerHTML = '&#9654;';
+            return;
+          }
+          if (!audioEl) {
+            audioEl = new Audio(mem.audio);
+            audioEl.ontimeupdate = () => {
+              if (audioEl.duration) prog.style.width = `${(audioEl.currentTime / audioEl.duration) * 100}%`;
+            };
+            audioEl.onended = () => { playBtn.innerHTML = '&#9654;'; prog.style.width = '100%'; };
+          }
+          audioEl.play();
+          playBtn.innerHTML = '&#9646;&#9646;';
+        });
+      }
+
+      if (mem.sketch) {
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'dl-btn';
+        dlBtn.textContent = 'download';
+        dlBtn.addEventListener('click', () => this._downloadMemory(mem));
+        foot.appendChild(dlBtn);
+      }
+
+      body.appendChild(foot);
+    }
 
     const popup = document.getElementById('memoryPopup');
     this._popupOpenedAt = Date.now();
@@ -1011,11 +1793,24 @@ class App {
     popup.setAttribute('aria-hidden', 'true');
   }
 
+  _downloadMemory(mem) {
+    if (!mem.sketch) return;
+    const a = document.createElement('a');
+    a.download = `memory-${mem.date || 'entry'}.png`;
+    a.href = mem.sketch;
+    a.click();
+  }
+
   _renderEntryBlock(mem, index, showLabel) {
     let html = `<section class="pop-day-entry">`;
 
     if (showLabel) {
       html += `<div class="pop-entry-label">entry ${index}</div>`;
+    }
+
+    if (mem.location) {
+      const locName = mem.location.name || `${mem.location.lat.toFixed(4)}, ${mem.location.lng.toFixed(4)}`;
+      html += `<div class="pop-location">&#x2316; ${escHtml(locName)}</div>`;
     }
 
     const textEntry = (mem.entry || '').trim();
