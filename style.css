@@ -848,6 +848,18 @@ canvas.sketch-locked { pointer-events: none; }
 }
 .pop-photo:hover { opacity: 0.85; }
 
+/* ─── Popup media loading ───────────────────────── */
+.pop-media-loading {
+  font-size: 0.62rem; letter-spacing: 0.14em; font-style: italic;
+  color: rgba(150, 110, 210, 0.45);
+  text-align: center; padding: 8px 0 2px;
+  animation: pulse-fade 1.2s ease-in-out infinite alternate;
+}
+@keyframes pulse-fade {
+  from { opacity: 0.4; }
+  to   { opacity: 1; }
+}
+
 /* ─── Popup audio player ────────────────────────── */
 .pop-audio-wrap {
   display: flex; align-items: center; gap: 10px;

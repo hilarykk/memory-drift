@@ -1740,18 +1740,43 @@ class App {
 
   /* ── Popup ────────────────────────────────────── */
 
-  async _openPopup(mem) {
-    // Lazy-load audio/images if not yet fetched (they were excluded from initial load)
-    if (!mem.isWeekly && mem.audio === undefined && mem.images === undefined) {
-      const full = await sb.loadMemoryFull(mem.id);
-      if (full) {
-        mem.audio  = full.audio  ?? null;
-        mem.images = full.images ?? null;
-      }
-    }
-
+  _openPopup(mem) {
     const body = document.getElementById('popupBody');
+    const popup = document.getElementById('memoryPopup');
 
+    // If media already cached, show everything immediately; otherwise show what we have now
+    const mediaReady = mem.isWeekly || mem.audio !== undefined || mem.images !== undefined;
+    this._renderPopupContent(mem, body, mediaReady);
+
+    this._popupOpenedAt = Date.now();
+    popup.classList.add('open');
+    popup.setAttribute('aria-hidden', 'false');
+
+    // Lazy-load audio/images in background if not yet fetched
+    if (!mem.isWeekly && mem.audio === undefined && mem.images === undefined) {
+      // Show a subtle loading indicator in the footer area
+      const loadingIndicator = document.createElement('div');
+      loadingIndicator.className = 'pop-media-loading';
+      loadingIndicator.textContent = 'loading media…';
+      body.appendChild(loadingIndicator);
+
+      sb.loadMemoryFull(mem.id).then(full => {
+        // Only update if the same popup is still open
+        if (!popup.classList.contains('open')) return;
+        if (full) {
+          mem.audio  = full.audio  ?? null;
+          mem.images = full.images ?? null;
+        } else {
+          mem.audio  = null;
+          mem.images = null;
+        }
+        // Re-render with full data
+        this._renderPopupContent(mem, body, true);
+      });
+    }
+  }
+
+  _renderPopupContent(mem, body, includeMedia) {
     const dateLong = formatDateLong(mem.date);
     const timeStr  = mem.time ? `<span class="pop-time">${mem.time}</span>` : '';
     let html = `<div class="pop-date">${dateLong}${timeStr}</div>`;
@@ -1764,7 +1789,7 @@ class App {
       html += `<img class="pop-sketch" src="${mem.sketch}" alt="sketch">`;
     }
 
-    if (mem.images && mem.images.length) {
+    if (includeMedia && mem.images && mem.images.length) {
       html += `<div class="pop-images">`;
       mem.images.forEach((src, i) => {
         html += `<img class="pop-photo" src="${src}" alt="photo ${i + 1}">`;
@@ -1776,7 +1801,6 @@ class App {
       const weekEntries = this.memories
         .filter(entry => isoWeekKey(entry.date) === mem.weekKey)
         .sort((a, b) => a.ts - b.ts);
-
       weekEntries.forEach((entry, idx) => {
         html += this._renderEntryBlock(entry, idx + 1, false);
       });
@@ -1791,7 +1815,7 @@ class App {
       const foot = document.createElement('div');
       foot.className = 'popup-foot';
 
-      if (mem.audio) {
+      if (includeMedia && mem.audio) {
         const audioWrap = document.createElement('div');
         audioWrap.className = 'pop-audio-wrap';
         const playBtn = document.createElement('button');
@@ -1848,11 +1872,6 @@ class App {
 
       body.appendChild(foot);
     }
-
-    const popup = document.getElementById('memoryPopup');
-    this._popupOpenedAt = Date.now();
-    popup.classList.add('open');
-    popup.setAttribute('aria-hidden', 'false');
   }
 
   _closePopup(e) {
