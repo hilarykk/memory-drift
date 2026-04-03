@@ -37,9 +37,25 @@ const sb = {
 
   async loadMemories(username) {
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?username=eq.${encodeURIComponent(username)}&order=ts.asc`, { headers: this._h });
+      // Fetch without heavy blob columns first — audio/images loaded on demand
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/memories?username=eq.${encodeURIComponent(username)}&select=id,date,time,entry,qa,mood,sketch,ts,username,location&order=ts.asc`,
+        { headers: this._h }
+      );
       if (!r.ok) return null;
       return await r.json();
+    } catch { return null; }
+  },
+
+  async loadMemoryFull(id) {
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/memories?id=eq.${encodeURIComponent(id)}&select=audio,images&limit=1`,
+        { headers: this._h }
+      );
+      if (!r.ok) return null;
+      const rows = await r.json();
+      return rows[0] || null;
     } catch { return null; }
   },
 
@@ -71,6 +87,12 @@ const sb = {
         body: JSON.stringify(row),
       });
     } catch (e) { console.warn('Supabase weekly save failed', e); }
+  },
+
+  async deleteMemory(id) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/memories?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: this._h });
+    } catch (e) { console.warn('Supabase delete failed', e); }
   },
 
   async deleteAll(username) {
@@ -323,7 +345,7 @@ class MemObj {
   setAgeScore(score) {
     this.ageScore = score;
     if (this.weekly) return;
-    const factor = lerp(0.5, 1.5, score);
+    const factor = lerp(1.25, 2.25, score);
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
@@ -335,7 +357,7 @@ class MemObj {
   bump() {
     if (this.weekly) return;
     this.clickCount++;
-    const factor  = lerp(0.5, 1.5, this.ageScore);
+    const factor  = lerp(1.25, 2.25, this.ageScore);
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
@@ -481,6 +503,11 @@ class World {
     this._recomputeAgeScores();
   }
 
+  addAll(mems) {
+    mems.forEach(m => this.objects.push(new MemObj(m, this.W, this.H)));
+    this._recomputeAgeScores();
+  }
+
   remove(id) {
     this.objects = this.objects.filter(o => o.mem.id !== id);
     this._recomputeAgeScores();
@@ -494,12 +521,12 @@ class World {
   _recomputeAgeScores() {
     const regular = this.objects.filter(o => !o.weekly && o.mem.ts);
     if (!regular.length) return;
-    const timestamps = regular.map(o => o.mem.ts);
-    const minTs = Math.min(...timestamps);
-    const maxTs = Math.max(...timestamps);
+    const tsNums = regular.map(o => typeof o.mem.ts === 'number' ? o.mem.ts : new Date(o.mem.ts).getTime());
+    const minTs = Math.min(...tsNums);
+    const maxTs = Math.max(...tsNums);
     const range = maxTs - minTs || 1;
-    regular.forEach(o => {
-      o.setAgeScore((o.mem.ts - minTs) / range);
+    regular.forEach((o, i) => {
+      o.setAgeScore((tsNums[i] - minTs) / range);
     });
   }
 
@@ -727,11 +754,20 @@ class App {
 
     if (this.currentUser) {
       this._showUserView(this.currentUser);
-      this._init(this.currentUser);
+      this._init(this.currentUser).then(() => {
+        if (new URLSearchParams(location.search).get('world') === '1') {
+          const intro = document.getElementById('introScreen');
+          intro.style.display = 'none';
+          this._enterWorld();
+        }
+      });
     }
   }
 
   async _init(username) {
+    const loadingEl = document.getElementById('worldLoading');
+    if (loadingEl) loadingEl.classList.add('visible');
+
     const [mems, wks] = await Promise.all([sb.loadMemories(username), sb.loadWeeklies(username)]);
 
     this.memories = (mems || []).map(normalizeMemory);
@@ -743,6 +779,8 @@ class App {
     }));
 
     this._populateWorld();
+
+    if (loadingEl) loadingEl.classList.remove('visible');
   }
 
   /* ── World setup ──────────────────────────────── */
@@ -754,8 +792,11 @@ class App {
   }
 
   _populateWorld() {
-    this.memories.forEach(m => this.world.add(m));
-    this.weeklies.forEach(w => this.world.add({ ...w, isWeekly: true }));
+    const all = [
+      ...this.memories,
+      ...this.weeklies.map(w => ({ ...w, isWeekly: true })),
+    ];
+    this.world.addAll(all);
   }
 
   _loop() {
@@ -864,10 +905,6 @@ class App {
       })
     );
 
-    document.getElementById('colorPicker').addEventListener('input', e => {
-      if (this.dc) this.dc.color = e.target.value;
-    });
-
     document.getElementById('brushSize').addEventListener('input', e => {
       if (this.dc) this.dc.size = +e.target.value;
     });
@@ -941,6 +978,17 @@ class App {
     document.getElementById('authUserView').style.display  = 'flex';
     document.getElementById('authWelcome').textContent = `welcome back, ${username}`;
     document.getElementById('recordBtn').classList.remove('record-btn--locked');
+
+    const seeBtn = document.getElementById('introSeeBtn');
+    if (seeBtn) {
+      seeBtn.style.display = 'block';
+      seeBtn.onclick = () => {
+        const intro = document.getElementById('introScreen');
+        intro.classList.add('hidden');
+        setTimeout(() => { intro.style.display = 'none'; }, 720);
+        this._enterWorld();
+      };
+    }
   }
 
   _signOut() {
@@ -1078,10 +1126,7 @@ class App {
         grid.querySelectorAll('.mood-swatch').forEach(s => s.classList.remove('selected'));
         btn.classList.add('selected');
         this.mood = m;
-        if (this.dc) {
-          this.dc.color = m.c[0];
-          document.getElementById('colorPicker').value = m.c[0];
-        }
+        if (this.dc) this.dc.color = m.c[0];
         // Unlock sketch + submit once mood is chosen
         document.getElementById('drawingCanvas').classList.remove('sketch-locked');
         document.querySelector('.drawing-wrap').classList.remove('sketch-locked-wrap');
@@ -1098,7 +1143,6 @@ class App {
     // Reset tool buttons
     document.querySelectorAll('.tbtn[data-tool]').forEach(b => b.classList.remove('active'));
     document.querySelector('.tbtn[data-tool="brush"]').classList.add('active');
-    document.getElementById('colorPicker').value = '#b48ef5';
     if (this.dc) this.dc.color = '#b48ef5';
     document.getElementById('brushSize').value = '10';
 
@@ -1382,6 +1426,9 @@ class App {
     clearInterval(this._qInterval);
     this._stopRecording();
     if (this._audioEl) { this._audioEl.pause(); this._audioEl = null; }
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'release this memory';
     const modal = document.getElementById('formModal');
     modal.classList.remove('open', 'initial');
     modal.setAttribute('aria-hidden', 'true');
@@ -1390,6 +1437,10 @@ class App {
   async _submit() {
     const date = document.getElementById('memoryDate').value;
     if (!date) return;
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'releasing…';
 
     const h    = document.getElementById('memoryHour').value;
     const m    = document.getElementById('memoryMinute').value;
@@ -1689,7 +1740,16 @@ class App {
 
   /* ── Popup ────────────────────────────────────── */
 
-  _openPopup(mem) {
+  async _openPopup(mem) {
+    // Lazy-load audio/images if not yet fetched (they were excluded from initial load)
+    if (!mem.isWeekly && mem.audio === undefined && mem.images === undefined) {
+      const full = await sb.loadMemoryFull(mem.id);
+      if (full) {
+        mem.audio  = full.audio  ?? null;
+        mem.images = full.images ?? null;
+      }
+    }
+
     const body = document.getElementById('popupBody');
 
     const dateLong = formatDateLong(mem.date);
@@ -1726,8 +1786,8 @@ class App {
 
     body.innerHTML = html;
 
-    // Footer: audio player + download
-    if (mem.audio || mem.sketch) {
+    // Footer: audio player + download + delete
+    if (!mem.isWeekly) {
       const foot = document.createElement('div');
       foot.className = 'popup-foot';
 
@@ -1773,6 +1833,18 @@ class App {
         dlBtn.addEventListener('click', () => this._downloadMemory(mem));
         foot.appendChild(dlBtn);
       }
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'del-btn';
+      delBtn.textContent = 'delete';
+      delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this memory?')) return;
+        await sb.deleteMemory(mem.id);
+        this.memories = this.memories.filter(m => m.id !== mem.id);
+        this.world.remove(mem.id);
+        this._closePopup();
+      });
+      foot.appendChild(delBtn);
 
       body.appendChild(foot);
     }

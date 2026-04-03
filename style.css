@@ -184,6 +184,21 @@ html, body {
     0 0 180px rgba(185, 150, 255, 0.08);
 }
 
+/* ── See memories (intro bottom link) ─────────── */
+.intro-see-btn {
+  background: none; border: none;
+  font-family: 'Playfair Display', serif;
+  font-size: 0.58rem; font-weight: 400; font-style: italic;
+  letter-spacing: 0.18em; text-transform: lowercase;
+  color: rgba(150, 110, 210, 0.40);
+  cursor: pointer;
+  padding: 4px;
+  margin-top: 8px;
+  transition: color 0.2s;
+  animation: intro-fade-up 3s ease both;
+}
+.intro-see-btn:hover { color: rgba(185, 165, 245, 0.85); }
+
 /* ── Glow ring (pulse indicator) ──────────────── */
 .record-glow-ring {
   width: 6px; height: 6px;
@@ -225,6 +240,18 @@ html, body {
 /* ─── World UI hidden until stage 3 ────────────── */
 #uiOverlay { opacity: 0; transition: opacity 1.0s ease; pointer-events: none; }
 #uiOverlay.visible { opacity: 1; }
+
+/* ─── World loading indicator ──────────────────── */
+.world-loading {
+  position: fixed; inset: 0; z-index: 8;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Playfair Display', serif;
+  font-size: 0.62rem; font-style: italic; letter-spacing: 0.18em;
+  color: rgba(150, 110, 210, 0.40);
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.4s ease;
+}
+.world-loading.visible { opacity: 1; }
 
 /* ─── World Canvas ──────────────────────────────── */
 #worldCanvas {
@@ -334,7 +361,7 @@ html, body {
   font-family: 'Playfair Display', serif;
   font-size: 0.58rem; font-weight: 400;
   letter-spacing: 0.18em; text-transform: lowercase;
-  cursor: pointer;
+  cursor: pointer; text-decoration: none;
   transition: color 0.2s; padding: 4px;
   white-space: nowrap;
 }
@@ -905,6 +932,25 @@ canvas.sketch-locked { pointer-events: none; }
   background: rgba(150, 110, 220, 0.06);
 }
 
+.del-btn {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.72rem; font-weight: 400; font-style: italic;
+  letter-spacing: 0.06em;
+  color: rgba(180, 80, 60, 0.45);
+  background: none;
+  border: 0.5px solid rgba(180, 80, 60, 0.18);
+  border-radius: 1px;
+  padding: 6px 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+.del-btn:hover {
+  border-color: rgba(220, 80, 60, 0.60);
+  color: rgba(240, 100, 80, 0.90);
+  background: rgba(200, 60, 40, 0.06);
+}
+
 /* ─── World empty / drift message ──────────────── */
 .world-empty {
   position: fixed; inset: 0;
@@ -1344,6 +1390,73 @@ canvas.sketch-locked { pointer-events: none; }
 .map-popup-entry {
   font-size: 0.62rem; color: var(--muted-w);
   line-height: 1.5;
+}
+
+/* ══════════════════════════════════════════════════
+   THE ZEITGEIST PAGE
+   ══════════════════════════════════════════════════ */
+
+.z-subtitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.58rem; font-style: italic; font-weight: 400;
+  letter-spacing: 0.14em; text-transform: lowercase;
+  color: rgba(150, 110, 210, 0.35);
+  margin-top: 4px;
+}
+
+.z-back-btn {
+  position: absolute;
+  top: 32px; right: 38px;
+  font-family: 'Playfair Display', serif;
+  font-size: 0.58rem; font-weight: 400;
+  letter-spacing: 0.14em; text-transform: lowercase;
+  color: rgba(145, 120, 195, 0.30);
+  text-decoration: none;
+  cursor: pointer; pointer-events: all;
+  transition: color 0.2s;
+}
+.z-back-btn:hover { color: rgba(185, 165, 245, 0.80); }
+
+.z-count {
+  position: absolute;
+  bottom: 38px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.52rem; letter-spacing: 0.16em; text-transform: lowercase;
+  color: rgba(150, 110, 210, 0.22);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ─── Hover tooltip ─────────────────────────────── */
+.z-tooltip {
+  position: fixed;
+  z-index: 300;
+  pointer-events: none;
+  background: rgba(8, 5, 22, 0.90);
+  border: 0.5px solid rgba(150, 110, 220, 0.22);
+  border-radius: 2px;
+  padding: 6px 12px;
+  display: flex; align-items: center; gap: 6px;
+  backdrop-filter: blur(8px);
+  opacity: 0; transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+.z-tooltip.visible { opacity: 1; }
+
+.z-tt-user {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.68rem; font-style: italic;
+  color: var(--text-w);
+}
+.z-tt-sep  { color: rgba(150, 110, 210, 0.28); font-size: 0.55rem; }
+.z-tt-date { font-size: 0.58rem; letter-spacing: 0.08em; color: var(--muted-w); }
+.z-tt-mood { font-size: 0.58rem; letter-spacing: 0.08em; color: rgba(180, 150, 240, 0.55); font-style: italic; }
+
+/* ─── Popup author line ─────────────────────────── */
+.z-pop-author {
+  font-size: 0.60rem; letter-spacing: 0.10em; font-style: italic;
+  color: rgba(150, 110, 210, 0.45);
+  margin-bottom: 16px; margin-top: -8px;
 }
 
 /* ─── Responsive ────────────────────────────────── */

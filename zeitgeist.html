@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Zeitgeist — Memory Drift</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <canvas id="worldCanvas"></canvas>
+  <div id="caustics"></div>
+
+  <!-- Hover tooltip -->
+  <div id="zTooltip" class="z-tooltip"></div>
+
+  <!-- UI overlay -->
+  <div id="uiOverlay" class="visible">
+    <header id="siteHeader">
+      <h1>The Zeitgeist</h1>
+      <p class="z-subtitle">a collective field of drifting memories</p>
+    </header>
+    <a href="index.html?world=1" class="z-back-btn">← return to your world</a>
+    <p id="worldHint" class="world-hint">click a memory to open it</p>
+    <p id="zCount" class="z-count"></p>
+  </div>
+
+  <!-- Memory popup (read-only) -->
+  <div id="memoryPopup" class="popup" aria-hidden="true">
+    <div class="popup-backdrop js-close-popup"></div>
+    <div class="popup-card">
+      <button class="close-btn js-close-popup" aria-label="Close">×</button>
+      <div id="popupBody"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="zeitgeist.js"></script>
+</body>
+</html>

@@ -37,6 +37,9 @@
       </button>
       <div class="record-glow-ring" aria-hidden="true"></div>
 
+      <!-- See memories -->
+      <button id="introSeeBtn" class="intro-see-btn" style="display:none">see your memories</button>
+
       <!-- Auth -->
       <div class="intro-auth" id="introAuth">
         <div id="authLoginView" class="auth-view">
@@ -56,6 +59,7 @@
 
   <!-- World -->
   <canvas id="worldCanvas"></canvas>
+  <div id="worldLoading" class="world-loading">loading your memories…</div>
 
   <!-- Caustic light shafts (CSS animated) -->
   <div id="caustics"></div>
@@ -70,6 +74,7 @@
       <button id="weeklyTabBtn" class="nav-tab-btn">see your memories</button>
       <button id="moodTabBtn" class="nav-tab-btn">mood</button>
       <button id="mapTabBtn" class="nav-tab-btn">map</button>
+      <a href="zeitgeist.html" class="nav-tab-btn nav-tab-link">the zeitgeist</a>
     </div>
     <button id="clearBtn" class="clear-all-btn">clear all</button>
     <button id="addBtn" class="add-btn" aria-label="Add a memory">+</button>
@@ -142,7 +147,6 @@
             <button class="tbtn" data-tool="pencil">pencil</button>
             <button class="tbtn" data-tool="eraser">erase</button>
             <span class="tb-sep"></span>
-            <input type="color" id="colorPicker" value="#c4a882" title="Color">
             <input type="range" id="brushSize" min="2" max="40" value="10">
             <span class="tb-sep"></span>
             <button class="tbtn" id="clearCanvas">clear</button>
