@@ -174,6 +174,7 @@ function weekDateRange(weekKey) {
   return `${fmt(d)} – ${fmt(sun)}`;
 }
 
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T12:00:00')
@@ -608,15 +609,26 @@ class DrawCanvas {
     this.ctx = el.getContext('2d');
     this.drawing = false;
     this.lx = 0; this.ly = 0;
-    this.tool  = 'brush';
+    this.tool  = 'pencil';
     this.color = '#c4a882';
     this.size  = 10;
-    this.clear();
+    this._history = [];
+    this._clearCanvas();
     this._bind();
   }
 
-  clear() {
+  _clearCanvas() {
     this.ctx.clearRect(0, 0, this.el.width, this.el.height);
+  }
+
+  _saveHistory() {
+    this._history.push(this.ctx.getImageData(0, 0, this.el.width, this.el.height));
+    if (this._history.length > 40) this._history.shift();
+  }
+
+  undo() {
+    if (!this._history.length) { this._clearCanvas(); return; }
+    this.ctx.putImageData(this._history.pop(), 0, 0);
   }
 
   _pos(e) {
@@ -629,6 +641,7 @@ class DrawCanvas {
 
   _down(e) {
     e.preventDefault();
+    this._saveHistory();
     this.drawing = true;
     const p = this._pos(e);
     this.lx = p.x; this.ly = p.y;
@@ -909,29 +922,11 @@ class App {
       if (this.dc) this.dc.size = +e.target.value;
     });
 
-    document.getElementById('clearCanvas').addEventListener('click', () => {
-      if (this.dc) this.dc.clear();
+    document.getElementById('undoCanvas').addEventListener('click', () => {
+      if (this.dc) this.dc.undo();
     });
 
-    document.getElementById('insertBtn').addEventListener('click', () => {
-      document.getElementById('insertInput').click();
-    });
-    document.getElementById('insertInput').addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (!file || !this.dc) return;
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const ctx = this.dc.ctx;
-        const cw = this.dc.el.width, ch = this.dc.el.height;
-        const scale = Math.min(cw / img.width, ch / img.height);
-        const w = img.width * scale, h = img.height * scale;
-        ctx.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
-      e.target.value = '';
-    });
+
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { this._closeForm(); this._closePopup(); this._closeWeeklyPanel(); this._closeMoodPanel(); }
@@ -1135,14 +1130,16 @@ class App {
       grid.appendChild(btn);
     });
 
-    // Drawing canvas
+    // Drawing canvas — reset history each open
     const dcEl = document.getElementById('drawingCanvas');
-    this.dc = new DrawCanvas(dcEl);
+    if (!this.dc) this.dc = new DrawCanvas(dcEl);
+    this.dc._clearCanvas();
+    this.dc._history = [];
     dcEl.style.background = '#060c18';
 
     // Reset tool buttons
     document.querySelectorAll('.tbtn[data-tool]').forEach(b => b.classList.remove('active'));
-    document.querySelector('.tbtn[data-tool="brush"]').classList.add('active');
+    document.querySelector('.tbtn[data-tool="pencil"]').classList.add('active');
     if (this.dc) this.dc.color = '#b48ef5';
     document.getElementById('brushSize').value = '10';
 
@@ -1239,9 +1236,9 @@ class App {
     };
 
     const commit = item => {
-      this.location = { lat: item.lat, lng: item.lng, name: item.label };
+      this.location = { lat: item.lat, lng: item.lng, name: item.name || item.label };
       input.value = item.label;
-      display.textContent = item.label;
+      display.textContent = item.name || item.label;
       close();
     };
 
@@ -1267,7 +1264,7 @@ class App {
       if (query.length < 2) { close(); return; }
       try {
         const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
-          + `?types=address&autocomplete=true&limit=6&language=en`
+          + `?types=poi,address,place,neighborhood&autocomplete=true&limit=8&language=en`
           + `&proximity=-73.9857,40.7484`
           + `&access_token=${MAPBOX_TOKEN}`;
         const r = await fetch(url);
@@ -1275,12 +1272,15 @@ class App {
         const data = await r.json();
         const items = (data.features || []).map(f => {
           const [lng, lat] = f.center;
-          // place_name = "123 Main St, City, State, Country"
-          // text       = "123 Main St"  (street portion only)
-          const label = f.place_name || f.text;
-          const main  = f.text || label;
-          const sub   = label.replace(main, '').replace(/^,\s*/, '');
-          return { lat, lng, label, main, sub };
+          // For POIs: text = landmark name, place_name includes full address context
+          const isPoi  = f.place_type && f.place_type.includes('poi');
+          const main   = f.text || f.place_name;
+          const full   = f.place_name || main;
+          // sub = everything after the name (address context)
+          const sub    = full.startsWith(main) ? full.slice(main.length).replace(/^,\s*/, '') : full;
+          // Store display name: for POIs use landmark name; for addresses use street
+          const name   = isPoi ? main : full;
+          return { lat, lng, label: full, main, sub, name };
         });
         render(items);
       } catch { /* network error — fail silently */ }
@@ -1388,26 +1388,26 @@ class App {
   }
 
   _addImages(e) {
-    const files = Array.from(e.target.files);
+    const file = e.target.files[0];
+    if (!file) return;
     const preview = document.getElementById('imagesPreview');
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const dataURL = ev.target.result;
-        this.images.push(dataURL);
-        const wrap = document.createElement('div');
-        wrap.className = 'img-thumb-wrap';
-        const idx = this.images.length - 1;
-        wrap.innerHTML = `<img src="${dataURL}" class="img-thumb" alt="photo">
-          <button type="button" class="img-remove-btn" aria-label="Remove">×</button>`;
-        wrap.querySelector('.img-remove-btn').onclick = () => {
-          this.images.splice(idx, 1);
-          wrap.remove();
-        };
-        preview.appendChild(wrap);
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataURL = ev.target.result;
+      // Replace any existing photo
+      this.images = [dataURL];
+      preview.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'img-thumb-wrap';
+      wrap.innerHTML = `<img src="${dataURL}" class="img-thumb" alt="photo">
+        <button type="button" class="img-remove-btn" aria-label="Remove">×</button>`;
+      wrap.querySelector('.img-remove-btn').onclick = () => {
+        this.images = [];
+        wrap.remove();
       };
-      reader.readAsDataURL(file);
-    });
+      preview.appendChild(wrap);
+    };
+    reader.readAsDataURL(file);
     e.target.value = '';
   }
 
@@ -1774,6 +1774,10 @@ class App {
     const body = document.getElementById('popupBody');
     const popup = document.getElementById('memoryPopup');
 
+    // Look up click count from the live MemObj
+    const obj = this.world.objects.find(o => o.mem.id === mem.id);
+    mem._clickCount = obj ? obj.clickCount : (mem._clickCount || 0);
+
     // If media already cached, show everything immediately; otherwise show what we have now
     const mediaReady = mem.isWeekly || mem.audio !== undefined || mem.images !== undefined;
     this._renderPopupContent(mem, body, mediaReady);
@@ -1810,6 +1814,10 @@ class App {
     const dateLong = formatDateLong(mem.date);
     const timeStr  = mem.time ? `<span class="pop-time">${mem.time}</span>` : '';
     let html = `<div class="pop-date">${dateLong}${timeStr}</div>`;
+
+    if (!mem.isWeekly && mem._clickCount > 0) {
+      html += `<div class="pop-click-count">${mem._clickCount} ${mem._clickCount === 1 ? 'visit' : 'visits'}</div>`;
+    }
 
     if (mem.isWeekly) {
       html += `<div class="pop-weekly-badge">✦ weekly echo &nbsp;·&nbsp; ${mem.count || ''} memories</div>`;

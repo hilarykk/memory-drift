@@ -35,6 +35,26 @@ const rand  = (a, b) => Math.random() * (b - a) + a;
 const lerp  = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
+function isoWeekKey(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() + 4 - day);
+  const yr = d.getFullYear();
+  const wk = Math.ceil(((d - new Date(yr, 0, 1)) / 86400000 + 1) / 7);
+  return `${yr}-W${String(wk).padStart(2, '0')}`;
+}
+
+function weekDateRange(weekKey) {
+  const [yr, wn] = weekKey.split('-W');
+  const d = new Date(+yr, 0, 1 + (+wn - 1) * 7);
+  const dow = d.getDay();
+  d.setDate(d.getDate() + (dow <= 4 ? 1 - dow : 8 - dow));
+  const sun = new Date(d); sun.setDate(d.getDate() + 6);
+  const fmt = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${fmt(d)} – ${fmt(sun)}`;
+}
+
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr + 'T12:00:00')
@@ -430,6 +450,73 @@ class ZeitgeistApp {
     }, 1800);
   }
 
+  _openWeeklyPanel() {
+    const container = document.getElementById('zWeeklyGrid');
+    container.innerHTML = '';
+
+    const byWeek = new Map();
+    this.memories.forEach(m => {
+      if (!m.date) return;
+      const key = isoWeekKey(m.date);
+      if (!byWeek.has(key)) byWeek.set(key, []);
+      byWeek.get(key).push(m);
+    });
+
+    if (byWeek.size === 0) {
+      container.innerHTML = `<div class="weekly-empty">no memories yet</div>`;
+    } else {
+      const sortedWeeks = [...byWeek.keys()].sort().reverse();
+      sortedWeeks.forEach(key => {
+        const mems = byWeek.get(key).sort((a, b) => new Date(a.ts) - new Date(b.ts));
+        const range = weekDateRange(key);
+
+        const section = document.createElement('div');
+        section.className = 'week-section';
+
+        const label = document.createElement('div');
+        label.className = 'week-section-label';
+        label.textContent = range;
+        section.appendChild(label);
+
+        const grid = document.createElement('div');
+        grid.className = 'week-sketch-grid';
+
+        mems.forEach(mem => {
+          const thumb = document.createElement('div');
+          thumb.className = 'week-thumb';
+          if (mem.sketch) {
+            thumb.innerHTML = `<img src="${mem.sketch}" alt="${formatDate(mem.date)}">`;
+          } else {
+            thumb.style.background = mem.mood
+              ? `linear-gradient(135deg,${mem.mood.c[0]}22,${mem.mood.c[1]}22)` : '';
+          }
+          const meta = document.createElement('div');
+          meta.className = 'week-thumb-date';
+          meta.textContent = `${mem.username || 'anon'} · ${formatDate(mem.date)}`;
+          thumb.appendChild(meta);
+          thumb.addEventListener('click', () => {
+            this._closeWeeklyPanel();
+            this._openPopup(mem);
+          });
+          grid.appendChild(thumb);
+        });
+
+        section.appendChild(grid);
+        container.appendChild(section);
+      });
+    }
+
+    const panel = document.getElementById('zWeeklyPanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+  }
+
+  _closeWeeklyPanel() {
+    const panel = document.getElementById('zWeeklyPanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
   _openMoodPanel() {
     const panel = document.getElementById('zMoodPanel');
     panel.classList.add('open');
@@ -635,6 +722,11 @@ class ZeitgeistApp {
       this._openPopup(obj.mem);
     });
 
+    // Everyone's memories tab
+    document.getElementById('zWeeklyTabBtn').addEventListener('click', () => this._openWeeklyPanel());
+    document.querySelectorAll('.js-close-zweekly').forEach(el =>
+      el.addEventListener('click', () => this._closeWeeklyPanel()));
+
     // Mood tab
     document.getElementById('zMoodTabBtn').addEventListener('click', () => this._openMoodPanel());
     document.querySelectorAll('.js-close-zmood').forEach(el =>
@@ -650,7 +742,7 @@ class ZeitgeistApp {
       el.addEventListener('click', e => this._closePopup(e)));
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { this._closePopup(); this._closeMapPanel(); this._closeMoodPanel(); }
+      if (e.key === 'Escape') { this._closePopup(); this._closeMapPanel(); this._closeMoodPanel(); this._closeWeeklyPanel(); }
     });
   }
 

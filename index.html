@@ -126,10 +126,10 @@
       </div>
 
       <div class="field-row images-row">
-        <label>add photos</label>
+        <label>add a photo</label>
         <div class="images-wrap">
-          <button type="button" class="images-add-btn" id="imagesAddBtn">+ add image</button>
-          <input type="file" id="imagesInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
+          <button type="button" class="images-add-btn" id="imagesAddBtn">+ add photo</button>
+          <input type="file" id="imagesInput" accept="image/jpeg,image/png,image/webp" style="display:none">
           <div class="images-preview" id="imagesPreview"></div>
         </div>
       </div>
@@ -149,9 +149,7 @@
             <span class="tb-sep"></span>
             <input type="range" id="brushSize" min="2" max="40" value="10">
             <span class="tb-sep"></span>
-            <button class="tbtn" id="clearCanvas">clear</button>
-            <button class="tbtn" id="insertBtn">insert</button>
-            <input type="file" id="insertInput" accept="image/jpeg,image/png" style="display:none">
+            <button class="tbtn" id="undoCanvas">undo</button>
           </div>
           <canvas id="drawingCanvas" width="500" height="340"></canvas>
         </div>

@@ -27,8 +27,20 @@
     <p id="worldHint" class="world-hint">click a memory to open it</p>
     <p id="zCount" class="z-count"></p>
     <div class="nav-tabs">
+      <button id="zWeeklyTabBtn" class="nav-tab-btn">everyone's memories</button>
       <button id="zMoodTabBtn" class="nav-tab-btn">mood</button>
       <button id="zMapTabBtn" class="nav-tab-btn">map</button>
+    </div>
+  </div>
+
+  <!-- Everyone's memories panel -->
+  <div id="zWeeklyPanel" class="weekly-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-zweekly"></div>
+    <div class="weekly-panel-card">
+      <button class="close-btn js-close-zweekly" aria-label="Close">×</button>
+      <div class="weekly-panel-title">everyone's memories</div>
+      <div class="weekly-panel-sub">all entries, grouped by week</div>
+      <div id="zWeeklyGrid" class="weekly-grid"></div>
     </div>
   </div>
 
