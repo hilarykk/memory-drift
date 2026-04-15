@@ -1327,7 +1327,7 @@ canvas.sketch-locked { pointer-events: none; }
   color: var(--muted-w); margin-bottom: 16px;
 }
 
-#mapContainer {
+#mapContainer, #zMapContainer {
   flex: 1;
   border: 0.5px solid var(--bdr-w);
   border-radius: 1px;
@@ -1438,6 +1438,41 @@ canvas.sketch-locked { pointer-events: none; }
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* ─── Zeitgeist map hover card ──────────────────── */
+.z-map-hover {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  max-width: 220px;
+  background: rgba(8, 5, 22, 0.96);
+  border: 0.5px solid rgba(150, 110, 220, 0.30);
+  border-radius: 6px;
+  padding: 10px 12px;
+  pointer-events: none;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.70);
+}
+.z-mh-header {
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 7px; flex-wrap: wrap;
+}
+.z-mh-user {
+  font-size: 0.65rem; font-style: italic;
+  color: rgba(185, 160, 255, 0.90);
+  font-family: 'Playfair Display', serif;
+}
+.z-mh-sep { font-size: 0.55rem; color: rgba(150, 110, 210, 0.40); }
+.z-mh-date { font-size: 0.58rem; color: rgba(150, 130, 200, 0.70); letter-spacing: 0.04em; }
+.z-mh-mood { font-size: 0.55rem; color: rgba(150, 110, 210, 0.60); letter-spacing: 0.08em; text-transform: lowercase; }
+.z-mh-sketch {
+  display: block; width: 100%; border-radius: 3px;
+  margin-bottom: 7px; opacity: 0.88;
+}
+.z-mh-entry {
+  font-size: 0.60rem; line-height: 1.5;
+  color: rgba(200, 185, 240, 0.75);
+}
+
 
 /* ─── Hover tooltip ─────────────────────────────── */
 .z-tooltip {

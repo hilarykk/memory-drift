@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
 
@@ -25,6 +26,33 @@
     <a href="index.html?world=1" class="z-back-btn">← return to your world</a>
     <p id="worldHint" class="world-hint">click a memory to open it</p>
     <p id="zCount" class="z-count"></p>
+    <div class="nav-tabs">
+      <button id="zMoodTabBtn" class="nav-tab-btn">mood</button>
+      <button id="zMapTabBtn" class="nav-tab-btn">map</button>
+    </div>
+  </div>
+
+  <!-- Mood panel -->
+  <div id="zMoodPanel" class="weekly-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-zmood"></div>
+    <div class="weekly-panel-card">
+      <button class="close-btn js-close-zmood" aria-label="Close">×</button>
+      <div class="weekly-panel-title">by mood</div>
+      <div class="weekly-panel-sub">everyone's memories grouped by feeling</div>
+      <div id="zMoodFilterBtns" class="mood-filter-row"></div>
+      <div id="zMoodMemGrid" class="week-sketch-grid"></div>
+    </div>
+  </div>
+
+  <!-- Map panel -->
+  <div id="zMapPanel" class="map-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-zmap"></div>
+    <div class="map-panel-card">
+      <button class="close-btn js-close-zmap" aria-label="Close">×</button>
+      <div class="map-panel-title">where everyone's been</div>
+      <div class="map-panel-sub">all memories with location data</div>
+      <div id="zMapContainer"></div>
+    </div>
   </div>
 
   <!-- Memory popup (read-only) -->
@@ -37,6 +65,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="zeitgeist.js"></script>
 </body>
 </html>

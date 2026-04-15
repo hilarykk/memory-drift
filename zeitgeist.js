@@ -13,6 +13,14 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const HEADERS       = { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` };
 
 
+const MOODS = [
+  { name: 'Happy', c: ['#ffe045', '#f07a10'] },
+  { name: 'Good',  c: ['#3ddfc8', '#1aaa8c'] },
+  { name: 'Fine',  c: ['#6ab8f7', '#3a7ee8'] },
+  { name: 'Bad',   c: ['#a86ef5', '#5c28d4'] },
+  { name: 'Busy',  c: ['#ff6040', '#e8185a'] },
+];
+
 const PARTICLE_PALETTE = [
   'rgba(180,150,255,', 'rgba(140,200,240,',
   'rgba(200,160,255,', 'rgba(120,230,200,',
@@ -422,6 +430,172 @@ class ZeitgeistApp {
     }, 1800);
   }
 
+  _openMoodPanel() {
+    const panel = document.getElementById('zMoodPanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+
+    const btnsWrap = document.getElementById('zMoodFilterBtns');
+    const gridEl   = document.getElementById('zMoodMemGrid');
+
+    btnsWrap.innerHTML = '';
+    const selected = MOODS[0].name;
+
+    MOODS.forEach(m => {
+      const btn = document.createElement('button');
+      btn.className = 'mood-filter-btn' + (m.name === selected ? ' active' : '');
+      btn.textContent = m.name;
+      btn.style.setProperty('--mc', m.c[0]);
+      btn.addEventListener('click', () => {
+        btnsWrap.querySelectorAll('.mood-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderMoodGrid(m.name);
+      });
+      btnsWrap.appendChild(btn);
+    });
+
+    const renderMoodGrid = moodName => {
+      gridEl.innerHTML = '';
+      const matches = this.memories.filter(m => m.mood && m.mood.name === moodName)
+        .sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+      if (!matches.length) {
+        gridEl.innerHTML = `<div class="weekly-empty">no ${moodName.toLowerCase()} memories yet</div>`;
+        return;
+      }
+
+      matches.forEach(mem => {
+        const thumb = document.createElement('div');
+        thumb.className = 'week-thumb';
+        if (mem.sketch) {
+          thumb.innerHTML = `<img src="${mem.sketch}" alt="${formatDate(mem.date)}">`;
+        } else {
+          thumb.style.background = `linear-gradient(135deg,${mem.mood.c[0]}22,${mem.mood.c[1]}22)`;
+        }
+        const meta = document.createElement('div');
+        meta.className = 'week-thumb-date';
+        meta.textContent = `${mem.username || 'anon'} · ${formatDate(mem.date)}`;
+        thumb.appendChild(meta);
+        thumb.addEventListener('click', () => {
+          this._closeMoodPanel();
+          this._openPopup(mem);
+        });
+        gridEl.appendChild(thumb);
+      });
+    };
+
+    renderMoodGrid(selected);
+  }
+
+  _closeMoodPanel() {
+    const panel = document.getElementById('zMoodPanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
+  _openMapPanel() {
+    const panel = document.getElementById('zMapPanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+
+    requestAnimationFrame(() => {
+      const container = document.getElementById('zMapContainer');
+      const located = this.memories.filter(m => m.location && m.location.lat != null);
+
+      if (!this._leafletMap) {
+        this._leafletMap = L.map(container, { zoomControl: true }).setView([40.7128, -74.006], 11);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          maxZoom: 19,
+        }).addTo(this._leafletMap);
+
+        this._mapMarkers = L.layerGroup().addTo(this._leafletMap);
+      }
+
+      this._mapMarkers.clearLayers();
+
+      if (located.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'map-empty';
+        empty.textContent = 'no memories with location data yet';
+        container.appendChild(empty);
+        return;
+      }
+
+      // Ensure hover card exists
+      let hoverCard = document.getElementById('zMapHover');
+      if (!hoverCard) {
+        hoverCard = document.createElement('div');
+        hoverCard.id = 'zMapHover';
+        hoverCard.className = 'z-map-hover';
+        document.body.appendChild(hoverCard);
+      }
+
+      const showHover = (mem, e) => {
+        const moodName  = mem.mood ? mem.mood.name : '';
+        const dateLabel = formatDate(mem.date);
+        const preview   = (mem.entry || '').slice(0, 100) + ((mem.entry || '').length > 100 ? '…' : '');
+        hoverCard.innerHTML =
+          `<div class="z-mh-header">` +
+            `<span class="z-mh-user">${escHtml(mem.username || 'anonymous')}</span>` +
+            `<span class="z-mh-sep">·</span>` +
+            `<span class="z-mh-date">${escHtml(dateLabel)}</span>` +
+            (moodName ? `<span class="z-mh-sep">·</span><span class="z-mh-mood">${escHtml(moodName)}</span>` : '') +
+          `</div>` +
+          (mem.sketch ? `<img class="z-mh-sketch" src="${mem.sketch}" alt="sketch">` : '') +
+          (preview ? `<div class="z-mh-entry">${escHtml(preview)}</div>` : '');
+        hoverCard.style.display = 'block';
+        positionHover(e);
+      };
+
+      const positionHover = (e) => {
+        const x = e.originalEvent.clientX, y = e.originalEvent.clientY;
+        hoverCard.style.left = `${x + 16}px`;
+        hoverCard.style.top  = `${y - 10}px`;
+      };
+
+      const hideHover = () => { hoverCard.style.display = 'none'; };
+
+      const bounds = [];
+      located.forEach(mem => {
+        const { lat, lng } = mem.location;
+        const moodColor = mem.mood ? mem.mood.c[0] : '#b48ef5';
+
+        const icon = L.divIcon({
+          className: 'map-marker',
+          html: `<div class="map-marker-dot" style="background:${moodColor}"></div>`,
+          iconSize: [12, 12],
+          iconAnchor: [6, 6],
+        });
+
+        const marker = L.marker([lat, lng], { icon });
+        marker.on('mouseover', e => showHover(mem, e));
+        marker.on('mousemove', positionHover);
+        marker.on('mouseout',  hideHover);
+        marker.on('click', () => {
+          hideHover();
+          this._closeMapPanel();
+          setTimeout(() => this._openPopup(mem), 320);
+        });
+        this._mapMarkers.addLayer(marker);
+        bounds.push([lat, lng]);
+      });
+
+      if (bounds.length === 1) {
+        this._leafletMap.setView(bounds[0], 10);
+      }
+
+      setTimeout(() => this._leafletMap.invalidateSize(), 80);
+    });
+  }
+
+  _closeMapPanel() {
+    const panel = document.getElementById('zMapPanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
   _bindUI() {
     const tooltip = document.getElementById('zTooltip');
 
@@ -461,12 +635,22 @@ class ZeitgeistApp {
       this._openPopup(obj.mem);
     });
 
+    // Mood tab
+    document.getElementById('zMoodTabBtn').addEventListener('click', () => this._openMoodPanel());
+    document.querySelectorAll('.js-close-zmood').forEach(el =>
+      el.addEventListener('click', () => this._closeMoodPanel()));
+
+    // Map tab
+    document.getElementById('zMapTabBtn').addEventListener('click', () => this._openMapPanel());
+    document.querySelectorAll('.js-close-zmap').forEach(el =>
+      el.addEventListener('click', () => this._closeMapPanel()));
+
     // Popup close
     document.querySelectorAll('.js-close-popup').forEach(el =>
       el.addEventListener('click', e => this._closePopup(e)));
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') this._closePopup();
+      if (e.key === 'Escape') { this._closePopup(); this._closeMapPanel(); this._closeMoodPanel(); }
     });
   }
 

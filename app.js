@@ -1694,11 +1694,41 @@ class App {
         return;
       }
 
+      // Ensure hover card exists
+      let hoverCard = document.getElementById('mapHoverCard');
+      if (!hoverCard) {
+        hoverCard = document.createElement('div');
+        hoverCard.id = 'mapHoverCard';
+        hoverCard.className = 'z-map-hover';
+        document.body.appendChild(hoverCard);
+      }
+
+      const showHover = (mem, e) => {
+        const moodName  = mem.mood ? mem.mood.name : '';
+        const dateLabel = formatDate(mem.date);
+        const preview   = (mem.entry || '').slice(0, 100) + ((mem.entry || '').length > 100 ? '…' : '');
+        hoverCard.innerHTML =
+          `<div class="z-mh-header">` +
+            `<span class="z-mh-date">${escHtml(dateLabel)}</span>` +
+            (moodName ? `<span class="z-mh-sep">·</span><span class="z-mh-mood">${escHtml(moodName)}</span>` : '') +
+          `</div>` +
+          (mem.sketch ? `<img class="z-mh-sketch" src="${mem.sketch}" alt="sketch">` : '') +
+          (preview ? `<div class="z-mh-entry">${escHtml(preview)}</div>` : '');
+        hoverCard.style.display = 'block';
+        positionHover(e);
+      };
+
+      const positionHover = (e) => {
+        const x = e.originalEvent.clientX, y = e.originalEvent.clientY;
+        hoverCard.style.left = `${x + 16}px`;
+        hoverCard.style.top  = `${y - 10}px`;
+      };
+
+      const hideHover = () => { hoverCard.style.display = 'none'; };
+
       const bounds = [];
       located.forEach(mem => {
-        const { lat, lng, name } = mem.location;
-        const locLabel = name || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
-        const dateLabel = formatDate(mem.date);
+        const { lat, lng } = mem.location;
 
         const icon = L.divIcon({
           className: 'map-marker',
@@ -1708,13 +1738,11 @@ class App {
         });
 
         const marker = L.marker([lat, lng], { icon });
-        marker.bindPopup(`
-          <div class="map-popup">
-            <div class="map-popup-date">${dateLabel}</div>
-            <div class="map-popup-loc">${escHtml(locLabel)}</div>
-            ${mem.entry ? `<div class="map-popup-entry">${escHtml(mem.entry.slice(0, 80))}${mem.entry.length > 80 ? '…' : ''}</div>` : ''}
-          </div>`, { className: 'map-leaflet-popup' });
+        marker.on('mouseover', e => showHover(mem, e));
+        marker.on('mousemove', positionHover);
+        marker.on('mouseout',  hideHover);
         marker.on('click', () => {
+          hideHover();
           this._closeMapPanel();
           setTimeout(() => this._openPopup(mem), 320);
         });
@@ -1736,6 +1764,8 @@ class App {
     const panel = document.getElementById('mapPanel');
     panel.classList.remove('open');
     panel.setAttribute('aria-hidden', 'true');
+    const hoverCard = document.getElementById('mapHoverCard');
+    if (hoverCard) hoverCard.style.display = 'none';
   }
 
   /* ── Popup ────────────────────────────────────── */
