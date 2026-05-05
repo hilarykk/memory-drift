@@ -1385,6 +1385,24 @@ canvas.sketch-locked { pointer-events: none; }
 }
 .map-marker:hover .map-marker-dot { transform: scale(1.5); }
 
+.map-marker-sketch {
+  width: 48px; height: 48px;
+  border-radius: 5px;
+  border: 2px solid;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.65);
+  transition: transform 0.15s;
+  background: #060c18;
+  cursor: pointer;
+}
+.map-marker-sketch img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0.88;
+}
+.map-marker:hover .map-marker-sketch { transform: scale(1.12); }
+
 /* ─── Leaflet popup ─────────────────────────────── */
 .map-leaflet-popup .leaflet-popup-content-wrapper {
   background: rgba(8, 5, 20, 0.95) !important;
@@ -1480,6 +1498,192 @@ canvas.sketch-locked { pointer-events: none; }
   color: rgba(200, 185, 240, 0.75);
 }
 
+/* ══════════════════════════════════════════════════
+   TIMELINE PANEL
+   ══════════════════════════════════════════════════ */
+
+.timeline-panel {
+  position: fixed; inset: 0; z-index: 150;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.40s ease;
+}
+.timeline-panel.open { opacity: 1; pointer-events: all; }
+.timeline-panel .modal-backdrop { cursor: pointer; }
+
+.timeline-panel-card {
+  position: relative; z-index: 1;
+  width: min(96vw, 1600px);
+  height: 82vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: rgba(6, 4, 18, 0.97);
+  border: 0.5px solid var(--bdr-w);
+  border-radius: 2px;
+  padding: 36px 44px 32px;
+  color: var(--text-w);
+  box-shadow: 0 0 0 0.5px rgba(120,160,220,0.10), 0 24px 80px rgba(0,0,0,0.80);
+  backdrop-filter: blur(16px);
+}
+.timeline-panel-card .close-btn { color: var(--muted-w); }
+.timeline-panel-card .close-btn:hover { color: var(--text-w); background: rgba(120,160,220,0.08); }
+
+.timeline-panel-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.65rem; font-weight: 400; font-style: italic;
+  letter-spacing: 0.18em; text-transform: lowercase;
+  color: var(--accent); margin-bottom: 6px;
+  flex-shrink: 0;
+}
+.timeline-panel-sub {
+  font-size: 0.58rem; font-weight: 400;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted-w); margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+/* ─── Horizontal timeline track ──────────────────── */
+.timeline-container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  padding: 0 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150, 110, 210, 0.35) transparent;
+  cursor: grab;
+}
+.timeline-container:active { cursor: grabbing; }
+.timeline-container::-webkit-scrollbar { height: 4px; }
+.timeline-container::-webkit-scrollbar-track { background: transparent; }
+.timeline-container::-webkit-scrollbar-thumb { background: rgba(150,110,210,0.35); border-radius: 2px; }
+
+/* spine lives on .timeline-panel-card (non-scrolling) — injected by JS */
+.tl-spine-fixed {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(170, 130, 230, 0.65) 3%,
+    rgba(170, 130, 230, 0.65) 97%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ─── Individual entry ───────────────────────────── */
+.tl-entry {
+  flex: 0 0 200px;
+  width: 200px;
+  position: relative;
+  z-index: 1;
+  scroll-snap-align: start;
+}
+
+/* connector line entry → spine */
+.tl-entry::after {
+  content: '';
+  position: absolute;
+  left: 50%; transform: translateX(-50%);
+  width: 1px;
+  background: rgba(150, 110, 210, 0.28);
+}
+.tl-top::after    { bottom: calc(50% + 4px); height: 10px; }
+.tl-bottom::after { top:    calc(50% + 4px); height: 10px; }
+
+/* dot on the spine */
+.tl-dot {
+  position: absolute;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  top: calc(50% - 4px);
+  left: calc(50% - 4px);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 6px currentColor;
+  z-index: 4;
+}
+
+/* card in the top half — anchored at spine, grows upward */
+.tl-top .tl-card {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(50% + 14px);
+}
+/* card in the bottom half — anchored at spine, grows downward */
+.tl-bottom .tl-card {
+  position: absolute;
+  left: 0; right: 0;
+  top: calc(50% + 14px);
+}
+
+.tl-card {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.18s;
+  user-select: none;
+}
+.tl-card:hover { opacity: 0.75; }
+
+/* date label — always just above the spine, inside the entry */
+.tl-date-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(50% + 8px);
+  font-size: 0.52rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(185, 160, 255, 0.82);
+  white-space: nowrap;
+  text-align: center;
+  z-index: 5;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.95);
+}
+.tl-date-label small {
+  display: block;
+  font-size: 0.42rem;
+  letter-spacing: 0.1em;
+  color: rgba(160, 135, 220, 0.55);
+  margin-top: 1px;
+}
+
+.tl-sketch {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  border-radius: 3px;
+}
+.tl-card-no-sketch {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+}
+.tl-card-user {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.42rem; font-style: italic;
+  color: rgba(160, 135, 220, 0.55);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .timeline-panel-card { padding: 24px 16px 20px; height: 85vh; }
+}
 
 /* ─── Hover tooltip ─────────────────────────────── */
 .z-tooltip {

@@ -74,6 +74,7 @@
       <button id="weeklyTabBtn" class="nav-tab-btn">see your memories</button>
       <button id="moodTabBtn" class="nav-tab-btn">mood</button>
       <button id="mapTabBtn" class="nav-tab-btn">map</button>
+      <button id="timelineTabBtn" class="nav-tab-btn">timeline</button>
       <a href="zeitgeist.html" class="nav-tab-btn nav-tab-link">the zeitgeist</a>
     </div>
     <button id="clearBtn" class="clear-all-btn">clear all</button>
@@ -192,6 +193,17 @@
       <div class="map-panel-title">where you've been</div>
       <div class="map-panel-sub">memories with location data</div>
       <div id="mapContainer"></div>
+    </div>
+  </div>
+
+  <!-- ── TIMELINE PANEL ── -->
+  <div id="timelinePanel" class="timeline-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-timeline"></div>
+    <div class="timeline-panel-card">
+      <button class="close-btn js-close-timeline" aria-label="Close">×</button>
+      <div class="timeline-panel-title">your timeline</div>
+      <div class="timeline-panel-sub">memories through time</div>
+      <div id="timelineContainer" class="timeline-container"></div>
     </div>
   </div>
 

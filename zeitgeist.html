@@ -30,6 +30,7 @@
       <button id="zWeeklyTabBtn" class="nav-tab-btn">everyone's memories</button>
       <button id="zMoodTabBtn" class="nav-tab-btn">mood</button>
       <button id="zMapTabBtn" class="nav-tab-btn">map</button>
+      <button id="zTimelineTabBtn" class="nav-tab-btn">timeline</button>
     </div>
   </div>
 
@@ -64,6 +65,17 @@
       <div class="map-panel-title">where everyone's been</div>
       <div class="map-panel-sub">all memories with location data</div>
       <div id="zMapContainer"></div>
+    </div>
+  </div>
+
+  <!-- Timeline panel -->
+  <div id="zTimelinePanel" class="timeline-panel" aria-hidden="true">
+    <div class="modal-backdrop js-close-ztimeline"></div>
+    <div class="timeline-panel-card">
+      <button class="close-btn js-close-ztimeline" aria-label="Close">×</button>
+      <div class="timeline-panel-title">collective timeline</div>
+      <div class="timeline-panel-sub">all memories through time</div>
+      <div id="zTimelineContainer" class="timeline-container"></div>
     </div>
   </div>
 

@@ -90,7 +90,7 @@ async function loadAllMemories() {
   try {
     // Fetch all memories, newest-first, with a high row cap
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/memories?select=id,date,time,entry,qa,mood,sketch,ts,username,location&order=ts.desc`,
+      `${SUPABASE_URL}/rest/v1/memories?select=id,date,time,entry,qa,mood,sketch,sketch_duration,ts,username,location&order=ts.desc`,
       { headers: HEADERS }
     );
     if (!r.ok) return [];
@@ -161,11 +161,17 @@ class MemObj {
     this.oscSpd = rand(0.007, 0.013);
 
     this.opacity    = 0;
-    this.tOpacity   = 0.55;
     this.ageScore   = 0.5;
     this.clickCount = 0;
     this.scale      = 1;
     this.hovered    = false;
+
+    const ms = mem.sketch_duration;
+    this.durationScore = (ms != null && ms > 0)
+      ? clamp(Math.log(ms + 1) / Math.log(60001), 0, 1)
+      : (ms === 0 ? 0 : 0.5);
+
+    this.tOpacity = lerp(0.12, 0.88, this.durationScore);
 
     this.pulsePh  = rand(0, Math.PI * 2);
     this.pulseSpd = rand(0.004, 0.009);
@@ -186,7 +192,8 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    this.tOpacity = clamp(lerp(0.22, 0.85, score + this.clickCount * 0.08), 0.22, 0.92);
+    const opacityScore = score * 0.6 + this.durationScore * 0.4;
+    this.tOpacity = clamp(lerp(0.08, 0.90, opacityScore) + this.clickCount * 0.06, 0.08, 0.92);
   }
 
   bump() {
@@ -195,7 +202,7 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    this.tOpacity = clamp(this.tOpacity + 0.08, 0.22, 0.92);
+    this.tOpacity = clamp(this.tOpacity + 0.06, 0.12, 0.92);
   }
 
   contains(px, py, pad = 0) {
@@ -649,11 +656,14 @@ class ZeitgeistApp {
         const { lat, lng } = mem.location;
         const moodColor = mem.mood ? mem.mood.c[0] : '#b48ef5';
 
+        const iconHtml = mem.sketch
+          ? `<div class="map-marker-sketch" style="border-color:${moodColor}"><img src="${mem.sketch}" alt="sketch"></div>`
+          : `<div class="map-marker-dot" style="background:${moodColor}"></div>`;
         const icon = L.divIcon({
           className: 'map-marker',
-          html: `<div class="map-marker-dot" style="background:${moodColor}"></div>`,
-          iconSize: [12, 12],
-          iconAnchor: [6, 6],
+          html: iconHtml,
+          iconSize:   mem.sketch ? [48, 48] : [12, 12],
+          iconAnchor: mem.sketch ? [24, 24] : [6, 6],
         });
 
         const marker = L.marker([lat, lng], { icon });
@@ -679,6 +689,100 @@ class ZeitgeistApp {
 
   _closeMapPanel() {
     const panel = document.getElementById('zMapPanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+
+  /* ── Timeline panel ───────────────────────────── */
+
+  _openTimelinePanel() {
+    const panel = document.getElementById('zTimelinePanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+
+    const container = document.getElementById('zTimelineContainer');
+    container.innerHTML = '';
+
+    // oldest → newest left to right
+    const sorted = [...this.memories].sort((a, b) => {
+      const ta = typeof a.ts === 'number' ? a.ts : new Date(a.ts).getTime();
+      const tb = typeof b.ts === 'number' ? b.ts : new Date(b.ts).getTime();
+      return ta - tb;
+    });
+
+    if (!sorted.length) {
+      container.innerHTML = `<div class="weekly-empty">no memories yet</div>`;
+      return;
+    }
+
+    const tooltip = document.getElementById('zTooltip');
+
+    sorted.forEach((mem, i) => {
+      const moodColor = mem.mood ? mem.mood.c[0] : '#b48ef5';
+      const side = i % 2 === 0 ? 'tl-top' : 'tl-bottom';
+
+      const entry = document.createElement('div');
+      entry.className = `tl-entry ${side}`;
+
+      const card = document.createElement('div');
+      card.className = 'tl-card';
+      card.innerHTML = mem.sketch
+        ? `<img class="tl-sketch" src="${mem.sketch}" alt="sketch">`
+        : `<div class="tl-card-no-sketch" style="background:linear-gradient(135deg,${moodColor}18,${moodColor}08)"></div>`;
+      card.addEventListener('click', () => {
+        this._closeTimelinePanel();
+        this._openPopup(mem);
+      });
+
+      const dot = document.createElement('div');
+      dot.className = 'tl-dot';
+      dot.style.background = moodColor;
+
+      const label = document.createElement('div');
+      label.className = 'tl-date-label';
+      label.textContent = mem.date
+        ? new Date(mem.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : '';
+
+      entry.addEventListener('mousemove', e => {
+        const moodStr = mem.mood ? mem.mood.name : '';
+        tooltip.innerHTML =
+          `<span class="z-tt-user">${escHtml(mem.username || 'anonymous')}</span>` +
+          `<span class="z-tt-sep">·</span>` +
+          `<span class="z-tt-date">${escHtml(formatDate(mem.date))}</span>` +
+          (moodStr ? `<span class="z-tt-sep">·</span><span class="z-tt-mood">${escHtml(moodStr)}</span>` : '');
+        tooltip.style.left = `${e.clientX + 14}px`;
+        tooltip.style.top  = `${e.clientY - 10}px`;
+        tooltip.classList.add('visible');
+      });
+      entry.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+
+      entry.appendChild(card);
+      entry.appendChild(dot);
+      entry.appendChild(label);
+      container.appendChild(entry);
+    });
+
+    // fixed spine line on panel-card (doesn't scroll with container)
+    const panelCard = panel.querySelector('.timeline-panel-card');
+    let spineEl = panelCard.querySelector('.tl-spine-fixed');
+    if (!spineEl) {
+      spineEl = document.createElement('div');
+      spineEl.className = 'tl-spine-fixed';
+      panelCard.appendChild(spineEl);
+    }
+    spineEl.style.top = (container.offsetTop + Math.round(container.offsetHeight / 2)) + 'px';
+
+    // drag-to-scroll
+    let _ds = false, _sx = 0, _sl = 0;
+    container.addEventListener('mousedown', e => { _ds = true; _sx = e.pageX - container.offsetLeft; _sl = container.scrollLeft; });
+    container.addEventListener('mouseleave', () => { _ds = false; });
+    container.addEventListener('mouseup', () => { _ds = false; });
+    container.addEventListener('mousemove', e => { if (!_ds) return; e.preventDefault(); container.scrollLeft = _sl - (e.pageX - container.offsetLeft - _sx); });
+  }
+
+  _closeTimelinePanel() {
+    const panel = document.getElementById('zTimelinePanel');
     panel.classList.remove('open');
     panel.setAttribute('aria-hidden', 'true');
   }
@@ -737,12 +841,17 @@ class ZeitgeistApp {
     document.querySelectorAll('.js-close-zmap').forEach(el =>
       el.addEventListener('click', () => this._closeMapPanel()));
 
+    // Timeline tab
+    document.getElementById('zTimelineTabBtn').addEventListener('click', () => this._openTimelinePanel());
+    document.querySelectorAll('.js-close-ztimeline').forEach(el =>
+      el.addEventListener('click', () => this._closeTimelinePanel()));
+
     // Popup close
     document.querySelectorAll('.js-close-popup').forEach(el =>
       el.addEventListener('click', e => this._closePopup(e)));
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { this._closePopup(); this._closeMapPanel(); this._closeMoodPanel(); this._closeWeeklyPanel(); }
+      if (e.key === 'Escape') { this._closePopup(); this._closeMapPanel(); this._closeMoodPanel(); this._closeWeeklyPanel(); this._closeTimelinePanel(); }
     });
   }
 

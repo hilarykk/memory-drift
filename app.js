@@ -39,7 +39,7 @@ const sb = {
     try {
       // Fetch without heavy blob columns first — audio/images loaded on demand
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/memories?username=eq.${encodeURIComponent(username)}&select=id,date,time,entry,qa,mood,sketch,ts,username,location&order=ts.asc`,
+        `${SUPABASE_URL}/rest/v1/memories?username=eq.${encodeURIComponent(username)}&select=id,date,time,entry,qa,mood,sketch,sketch_duration,ts,username,location&order=ts.asc`,
         { headers: this._h }
       );
       if (!r.ok) return null;
@@ -69,7 +69,7 @@ const sb = {
 
   async saveMemory(mem) {
     try {
-      const row = { id: mem.id, date: mem.date, time: mem.time || null, entry: mem.entry, qa: mem.qa, mood: mem.mood, sketch: mem.sketch, ts: mem.ts, username: mem.username, location: mem.location || null, audio: mem.audio || null, images: mem.images || null };
+      const row = { id: mem.id, date: mem.date, time: mem.time || null, entry: mem.entry, qa: mem.qa, mood: mem.mood, sketch: mem.sketch, sketch_duration: mem.sketch_duration || null, ts: mem.ts, username: mem.username, location: mem.location || null, audio: mem.audio || null, images: mem.images || null };
       await fetch(`${SUPABASE_URL}/rest/v1/memories`, {
         method: 'POST',
         headers: { ...this._h, 'Prefer': 'resolution=merge-duplicates' },
@@ -325,12 +325,20 @@ class MemObj {
     this.oscSpd = rand(0.007, 0.013);
     this.oscAmp = rand(6, 16);
 
-    this.opacity   = 0;
-    this.tOpacity  = this.weekly ? 0.92 : 0.55; // overridden by setAgeScore
-    this.ageScore  = 0.5;
+    this.opacity    = 0;
+    this.ageScore   = 0.5;
     this.clickCount = 0;
-    this.scale     = 1;
-    this.hovered   = false;
+    this.scale      = 1;
+    this.hovered    = false;
+
+    // Duration score: 0 (fastest) → 1 (longest). Log scale, cap at 60s pen-down.
+    // Old memories without duration get 0.5 (mid opacity).
+    const ms = mem.sketch_duration;
+    this.durationScore = (ms != null && ms > 0)
+      ? clamp(Math.log(ms + 1) / Math.log(60001), 0, 1)
+      : (ms === 0 ? 0 : 0.5);
+
+    this.tOpacity = this.weekly ? 0.92 : lerp(0.12, 0.88, this.durationScore);
 
     // Breathing pulse to feel alive
     this.pulsePh  = rand(0, Math.PI * 2);
@@ -342,7 +350,7 @@ class MemObj {
     this.glowCol = (mem.mood ? mem.mood.c[0] : '#8b7db5');
   }
 
-  // Called by World whenever age range changes
+  // Called by World whenever age range changes — size from age, opacity from age + duration
   setAgeScore(score) {
     this.ageScore = score;
     if (this.weekly) return;
@@ -350,8 +358,8 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    this.tOpacity = lerp(0.22, 0.85, score + this.clickCount * 0.08);
-    this.tOpacity = clamp(this.tOpacity, 0.22, 0.92);
+    const opacityScore = score * 0.6 + this.durationScore * 0.4;
+    this.tOpacity = clamp(lerp(0.08, 0.90, opacityScore) + this.clickCount * 0.06, 0.08, 0.92);
   }
 
   // Called on each click — grow size and opacity
@@ -362,7 +370,7 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    this.tOpacity = clamp(this.tOpacity + 0.08, 0.22, 0.92);
+    this.tOpacity = clamp(this.tOpacity + 0.06, 0.12, 0.92);
   }
 
   contains(px, py, pad = 0) {
@@ -619,6 +627,8 @@ class DrawCanvas {
 
   _clearCanvas() {
     this.ctx.clearRect(0, 0, this.el.width, this.el.height);
+    this._drawStart   = null;
+    this._totalDrawMs = 0;
   }
 
   _saveHistory() {
@@ -643,6 +653,7 @@ class DrawCanvas {
     e.preventDefault();
     this._saveHistory();
     this.drawing = true;
+    this._drawStart = Date.now();
     const p = this._pos(e);
     this.lx = p.x; this.ly = p.y;
     this._dot(p.x, p.y);
@@ -656,7 +667,15 @@ class DrawCanvas {
     this.lx = p.x; this.ly = p.y;
   }
 
-  _up() { this.drawing = false; }
+  _up() {
+    if (this._drawStart !== null) {
+      this._totalDrawMs += Date.now() - this._drawStart;
+      this._drawStart = null;
+    }
+    this.drawing = false;
+  }
+
+  drawDuration() { return this._totalDrawMs; }
 
   _dot(x, y) {
     const ctx = this.ctx;
@@ -897,6 +916,11 @@ class App {
     document.querySelectorAll('.js-close-map').forEach(el =>
       el.addEventListener('click', () => this._closeMapPanel()));
 
+    // Timeline panel
+    document.getElementById('timelineTabBtn').addEventListener('click', () => this._openTimelinePanel());
+    document.querySelectorAll('.js-close-timeline').forEach(el =>
+      el.addEventListener('click', () => this._closeTimelinePanel()));
+
     // Close popup
     document.querySelectorAll('.js-close-popup').forEach(el =>
       el.addEventListener('click', e => this._closePopup(e)));
@@ -929,7 +953,7 @@ class App {
 
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { this._closeForm(); this._closePopup(); this._closeWeeklyPanel(); this._closeMoodPanel(); }
+      if (e.key === 'Escape') { this._closeForm(); this._closePopup(); this._closeWeeklyPanel(); this._closeMoodPanel(); this._closeMapPanel(); this._closeTimelinePanel(); }
     });
   }
 
@@ -1457,7 +1481,8 @@ class App {
       entry,
       qa,
       mood:     this.mood,
-      sketch:   this.dc ? this.dc.dataURL() : null,
+      sketch:          this.dc ? this.dc.dataURL() : null,
+      sketch_duration: this.dc ? this.dc.drawDuration() : null,
       ts:       Date.now(),
       username: this.currentUser,
       location: this.location || null,
@@ -1730,11 +1755,15 @@ class App {
       located.forEach(mem => {
         const { lat, lng } = mem.location;
 
+        const moodColor = mem.mood ? mem.mood.c[0] : '#b48ef5';
+        const iconHtml = mem.sketch
+          ? `<div class="map-marker-sketch" style="border-color:${moodColor}"><img src="${mem.sketch}" alt="sketch"></div>`
+          : `<div class="map-marker-dot" style="background:${moodColor}"></div>`;
         const icon = L.divIcon({
           className: 'map-marker',
-          html: `<div class="map-marker-dot" style="background:${mem.mood ? mem.mood.c[0] : '#b48ef5'}"></div>`,
-          iconSize: [12, 12],
-          iconAnchor: [6, 6],
+          html: iconHtml,
+          iconSize:   mem.sketch ? [48, 48] : [12, 12],
+          iconAnchor: mem.sketch ? [24, 24] : [6, 6],
         });
 
         const marker = L.marker([lat, lng], { icon });
@@ -1766,6 +1795,85 @@ class App {
     panel.setAttribute('aria-hidden', 'true');
     const hoverCard = document.getElementById('mapHoverCard');
     if (hoverCard) hoverCard.style.display = 'none';
+  }
+
+  /* ── Timeline panel ───────────────────────────── */
+
+  _openTimelinePanel() {
+    const panel = document.getElementById('timelinePanel');
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+
+    const container = document.getElementById('timelineContainer');
+    container.innerHTML = '';
+
+    // oldest → newest left to right
+    const sorted = [...this.memories].sort((a, b) => {
+      const ta = typeof a.ts === 'number' ? a.ts : new Date(a.ts).getTime();
+      const tb = typeof b.ts === 'number' ? b.ts : new Date(b.ts).getTime();
+      return ta - tb;
+    });
+
+    if (!sorted.length) {
+      container.innerHTML = `<div class="weekly-empty">no memories yet</div>`;
+      return;
+    }
+
+    sorted.forEach((mem, i) => {
+      const moodColor = mem.mood ? mem.mood.c[0] : '#b48ef5';
+      const side = i % 2 === 0 ? 'tl-top' : 'tl-bottom';
+
+      const entry = document.createElement('div');
+      entry.className = `tl-entry ${side}`;
+
+      const card = document.createElement('div');
+      card.className = 'tl-card';
+      card.innerHTML = mem.sketch
+        ? `<img class="tl-sketch" src="${mem.sketch}" alt="sketch">`
+        : `<div class="tl-card-no-sketch" style="background:linear-gradient(135deg,${moodColor}18,${moodColor}08)"></div>`;
+      card.addEventListener('click', () => {
+        this._closeTimelinePanel();
+        this._openPopup(mem);
+      });
+
+      const dot = document.createElement('div');
+      dot.className = 'tl-dot';
+      dot.style.background = moodColor;
+
+      const label = document.createElement('div');
+      label.className = 'tl-date-label';
+      label.textContent = mem.date
+        ? new Date(mem.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : '';
+
+      entry.appendChild(card);
+      entry.appendChild(dot);
+      entry.appendChild(label);
+      container.appendChild(entry);
+    });
+
+    // fixed spine line on panel-card (doesn't scroll with container)
+    const panelCard = panel.querySelector('.timeline-panel-card');
+    let spineEl = panelCard.querySelector('.tl-spine-fixed');
+    if (!spineEl) {
+      spineEl = document.createElement('div');
+      spineEl.className = 'tl-spine-fixed';
+      panelCard.appendChild(spineEl);
+    }
+    spineEl.style.top = (container.offsetTop + Math.round(container.offsetHeight / 2)) + 'px';
+
+    // drag-to-scroll
+    let _ds = false, _sx = 0, _sl = 0;
+    container.addEventListener('mousedown', e => { _ds = true; _sx = e.pageX - container.offsetLeft; _sl = container.scrollLeft; });
+    container.addEventListener('mouseleave', () => { _ds = false; });
+    container.addEventListener('mouseup', () => { _ds = false; });
+    container.addEventListener('mousemove', e => { if (!_ds) return; e.preventDefault(); container.scrollLeft = _sl - (e.pageX - container.offsetLeft - _sx); });
+  }
+
+  _closeTimelinePanel() {
+    const panel = document.getElementById('timelinePanel');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
   }
 
   /* ── Popup ────────────────────────────────────── */
