@@ -161,17 +161,11 @@ class MemObj {
     this.oscSpd = rand(0.007, 0.013);
 
     this.opacity    = 0;
+    this.tOpacity   = 0.55;
     this.ageScore   = 0.5;
     this.clickCount = 0;
     this.scale      = 1;
     this.hovered    = false;
-
-    const ms = mem.sketch_duration;
-    this.durationScore = (ms != null && ms > 0)
-      ? clamp(Math.log(ms + 1) / Math.log(60001), 0, 1)
-      : (ms === 0 ? 0 : 0.5);
-
-    this.tOpacity = lerp(0.12, 0.88, this.durationScore);
 
     this.pulsePh  = rand(0, Math.PI * 2);
     this.pulseSpd = rand(0.004, 0.009);
@@ -192,8 +186,7 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    const opacityScore = score * 0.6 + this.durationScore * 0.4;
-    this.tOpacity = clamp(lerp(0.08, 0.90, opacityScore) + this.clickCount * 0.06, 0.08, 0.92);
+    this.tOpacity = clamp(lerp(0.22, 0.85, score + this.clickCount * 0.08), 0.22, 0.92);
   }
 
   bump() {
@@ -202,7 +195,7 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    this.tOpacity = clamp(this.tOpacity + 0.06, 0.12, 0.92);
+    this.tOpacity = clamp(this.tOpacity + 0.08, 0.22, 0.92);
   }
 
   contains(px, py, pad = 0) {

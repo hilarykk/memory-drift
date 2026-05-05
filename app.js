@@ -326,19 +326,11 @@ class MemObj {
     this.oscAmp = rand(6, 16);
 
     this.opacity    = 0;
+    this.tOpacity   = this.weekly ? 0.92 : 0.55;
     this.ageScore   = 0.5;
     this.clickCount = 0;
     this.scale      = 1;
     this.hovered    = false;
-
-    // Duration score: 0 (fastest) → 1 (longest). Log scale, cap at 60s pen-down.
-    // Old memories without duration get 0.5 (mid opacity).
-    const ms = mem.sketch_duration;
-    this.durationScore = (ms != null && ms > 0)
-      ? clamp(Math.log(ms + 1) / Math.log(60001), 0, 1)
-      : (ms === 0 ? 0 : 0.5);
-
-    this.tOpacity = this.weekly ? 0.92 : lerp(0.12, 0.88, this.durationScore);
 
     // Breathing pulse to feel alive
     this.pulsePh  = rand(0, Math.PI * 2);
@@ -350,7 +342,7 @@ class MemObj {
     this.glowCol = (mem.mood ? mem.mood.c[0] : '#8b7db5');
   }
 
-  // Called by World whenever age range changes — size from age, opacity from age + duration
+  // Called by World whenever age range changes
   setAgeScore(score) {
     this.ageScore = score;
     if (this.weekly) return;
@@ -358,8 +350,8 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    const opacityScore = score * 0.6 + this.durationScore * 0.4;
-    this.tOpacity = clamp(lerp(0.08, 0.90, opacityScore) + this.clickCount * 0.06, 0.08, 0.92);
+    this.tOpacity = lerp(0.22, 0.85, score + this.clickCount * 0.08);
+    this.tOpacity = clamp(this.tOpacity, 0.22, 0.92);
   }
 
   // Called on each click — grow size and opacity
@@ -370,7 +362,7 @@ class MemObj {
     const boosted = Math.min(factor + this.clickCount * 0.2, 1.5);
     this.bw = this.baseBw * boosted;
     this.bh = this.bw * 0.72;
-    this.tOpacity = clamp(this.tOpacity + 0.06, 0.12, 0.92);
+    this.tOpacity = clamp(this.tOpacity + 0.08, 0.22, 0.92);
   }
 
   contains(px, py, pad = 0) {
